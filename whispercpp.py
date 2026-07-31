@@ -23,7 +23,6 @@ import http.client
 import os
 import pathlib
 import shutil
-import signal
 import socket
 import subprocess
 import tempfile
@@ -32,6 +31,7 @@ import time
 import urllib.error
 import urllib.request
 
+import plat
 from i18n import t
 
 BINARY = "whisper-server"
@@ -46,9 +46,7 @@ DEFAULT_MODEL = "large-v3-turbo"
 STARTUP_TIMEOUT = 60.0
 DOWNLOAD_CHUNK = 1 << 20
 
-MODELS_DIR = (pathlib.Path(os.environ.get("XDG_DATA_HOME")
-                           or os.path.expanduser("~/.local/share"))
-              / "dikte" / "models")
+MODELS_DIR = plat.data_home() / "dikte" / "models"
 
 # `size` is what the download is expected to weigh, used to warn before it
 # starts and to draw the progress bar before the first response header arrives.
@@ -95,10 +93,28 @@ def human_size(count):
 
 def binary_path(custom=""):
     """The whisper-server to run, or "" when there is none."""
-    custom = (custom or "").strip()
+    custom = (custom or "").strip().strip('"')
     if custom:
-        return custom if os.path.isfile(custom) and os.access(custom, os.X_OK) else ""
+        candidates = [custom]
+        # Windows keeps the extension out of the name everywhere else, so a
+        # path typed or pasted without it should still find the program.
+        if plat.WINDOWS and not os.path.splitext(custom)[1]:
+            candidates.append(custom + ".exe")
+        for candidate in candidates:
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return candidate
+        return ""
     return shutil.which(BINARY) or ""
+
+
+def install_hint():
+    """How to get whisper.cpp onto this machine, in one sentence."""
+    if plat.WINDOWS:
+        return t("whisper.cpp is not installed. Download a whisper.cpp release "
+                 "(whisper-server.exe) and point Settings → Local whisper at it, "
+                 "or put its folder on PATH.")
+    return t("whisper.cpp is not installed. Install it with: "
+             "sudo pacman -S whisper-cpp")
 
 
 def available(custom=""):
@@ -158,13 +174,14 @@ def download(model_id, on_progress=None, should_stop=None):
         model_url(model_id), headers={"User-Agent": "dikte/1.0"})
     done = 0
     try:
+        stopped = False
         with urllib.request.urlopen(request, timeout=60) as response:
             total = int(response.headers.get("Content-Length") or 0)
             with open(part, "wb") as out:
                 while True:
                     if should_stop is not None and should_stop():
-                        part.unlink(missing_ok=True)
-                        return False
+                        stopped = True
+                        break
                     block = response.read(DOWNLOAD_CHUNK)
                     if not block:
                         break
@@ -172,6 +189,12 @@ def download(model_id, on_progress=None, should_stop=None):
                     done += len(block)
                     if on_progress is not None:
                         on_progress(done, total)
+        # Deleted out here rather than where the stop was noticed: Windows
+        # refuses to unlink a file that is still open, and the `with` above is
+        # what closes it.
+        if stopped:
+            part.unlink(missing_ok=True)
+            return False
         # A proxy or an error page that came back as 200 would otherwise be
         # renamed into place and only fail when the server tries to read it.
         if total and done != total:
@@ -226,28 +249,79 @@ def _pid_file():
 
 
 def _remember(pid):
+    """Write down the server that was just started, so a later run can find it.
+
+    One line per server rather than one line in total. A single line looks
+    enough — there is only ever one Dikte, and it runs one server — but the note
+    is read and written by whatever else is around too: a second instance
+    starting while the first is up, a script, a test. With one line the newcomer
+    overwrote the note, and when *it* shut down cleanly it took the note away
+    with it, leaving the first server running with nothing left that knew about
+    it and a gigabyte and a half of graphics memory in its hands.
+
+    The identity beside each pid is what Windows has instead of /proc: taken
+    while the process is known to be the right one, and compared against later.
+    """
+    entry = f"{pid}\t{plat.process_identity(pid)}"
+    entries = [line for line in _recall_all() if not line.startswith(f"{pid}\t")]
+    _write_note(entries + [entry])
+
+
+def _write_note(entries):
     try:
         path = _pid_file()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(str(pid))
+        if entries:
+            path.write_text("\n".join(entries) + "\n")
+        else:
+            path.unlink(missing_ok=True)
     except OSError:
         pass       # the sweep is a safety net, not something to fail a run over
 
 
-def _forget():
+def _recall_all():
+    """Every line of the note, as it stands."""
     try:
-        _pid_file().unlink()
+        return [line for line in _pid_file().read_text().splitlines() if line.strip()]
     except OSError:
-        pass
+        return []
 
 
-def _is_our_server(pid):
+def _recall():
+    """[(pid, identity)] for every server the note knows about."""
+    servers = []
+    for line in _recall_all():
+        pid, _, identity = line.partition("\t")
+        try:
+            servers.append((int(pid.strip()), identity.strip()))
+        except ValueError:
+            continue
+    return servers
+
+
+def _forget(pid=None):
+    """Drop one server from the note, or the whole note when none is named."""
+    if pid is None:
+        _write_note([])
+        return
+    _write_note([line for line in _recall_all()
+                 if not line.startswith(f"{pid}\t")])
+
+
+def _is_our_server(pid, identity=""):
     """Whether that pid is still the whisper-server this Dikte started.
 
     Asked because pids are handed out again: by the time anyone looks, the
     number could belong to something else entirely, and killing it would be a
     good deal worse than the leak being cleaned up.
     """
+    if plat.WINDOWS:
+        # Windows keeps no /proc and no cheap way to read another process's
+        # command line, so the note taken at startup is what is checked: the
+        # same program, started at the same moment, is the same process. It
+        # also covers a `binary` setting pointing at a wrapper, where the
+        # program running under that pid is the wrapper rather than the server.
+        return bool(identity) and plat.process_identity(pid) == identity
     try:
         blob = pathlib.Path(f"/proc/{pid}/cmdline").read_bytes()
     except OSError:
@@ -262,25 +336,38 @@ def _is_our_server(pid):
 
 
 def sweep():
-    """Kill a server a previous Dikte left behind. True when one was found.
+    """Kill every server a previous Dikte left behind. True when one was found.
 
     stop() and atexit cover every exit that gets to run code. A SIGKILL does
     not, and neither does the session being torn down from under it, and
     whisper-server would then sit there holding a gigabyte and a half of
     graphics memory with nothing left alive to ask it anything.
+
+    Every server in the note rather than the last one: what is being cleaned up
+    here is exactly the case where more than one was left, and stopping after
+    the first would leave the rest where they are.
     """
-    try:
-        pid = int(_pid_file().read_text().strip())
-    except (OSError, ValueError):
+    servers = _recall()
+    if not servers:
         return False
     _forget()
-    if not _is_our_server(pid):
-        return False
+    killed = False
+    for pid, identity in servers:
+        if _is_our_server(pid, identity):
+            killed = plat.terminate_pid(pid) or killed
+    return killed
+
+
+def _remove(path):
+    """Delete a file, and shrug when it will not go.
+
+    Windows refuses while anything still holds the file open, and a log nobody
+    is going to read again is not worth failing a run over.
+    """
     try:
-        os.kill(pid, signal.SIGTERM)
+        os.unlink(path)
     except OSError:
-        return False
-    return True
+        pass
 
 
 def _tail(path, lines=3):
@@ -352,9 +439,7 @@ class _Server:
         settings = self._settings
         binary = binary_path(settings["binary"])
         if not binary:
-            raise LocalWhisperError(
-                t("whisper.cpp is not installed. Install it with: "
-                  "sudo pacman -S whisper-cpp"))
+            raise LocalWhisperError(install_hint())
         model = model_path(settings["model"])
         if not installed(settings["model"]):
             raise LocalWhisperError(
@@ -389,10 +474,10 @@ class _Server:
                 with open(log.name, "wb") as sink:
                     proc = subprocess.Popen(
                         args, stdout=sink, stderr=subprocess.STDOUT,
-                        stdin=subprocess.DEVNULL,
+                        stdin=subprocess.DEVNULL, **plat.quiet()
                     )
             except OSError as exc:
-                os.unlink(log.name)
+                _remove(log.name)
                 raise LocalWhisperError(
                     t("Could not start whisper.cpp: {error}", error=exc)) from exc
 
@@ -404,8 +489,8 @@ class _Server:
                 self._running_key = self._key()
                 return
             last = _tail(log.name)
-            os.unlink(log.name)
-            _forget()
+            _remove(log.name)
+            _forget(proc.pid)
             # A port taken between the probe and the bind is the one failure
             # worth another go; anything else will fail the same way again.
             if "address" not in last.lower() and "bind" not in last.lower():
@@ -438,12 +523,11 @@ class _Server:
                 proc.kill()
                 proc.wait(timeout=5)
         if log:
-            try:
-                os.unlink(log)
-            except OSError:
-                pass
+            _remove(log)
         if proc is not None:
-            _forget()
+            # Only this one's line: another instance's server may be in the note
+            # too, and taking the whole note away is how one got lost before.
+            _forget(proc.pid)
 
     def error(self):
         """The last thing the server printed, for a failure after it started."""
@@ -493,8 +577,7 @@ def status(model_id=None, binary=""):
     current = _SERVER.settings()
     model_id = model_id or current["model"]
     if not available(binary):
-        return t("whisper.cpp is not installed. Install it with: "
-                 "sudo pacman -S whisper-cpp")
+        return install_hint()
     if not installed(model_id):
         model = find(model_id)
         return t("“{model}” has not been downloaded yet ({size}).",

@@ -17,6 +17,7 @@ import wave
 from PyQt6.QtCore import QObject, pyqtSignal
 
 import api
+import plat
 from i18n import t
 
 CHUNK_SECONDS = 600          # 10 min ≈ 19 MB at 16 kHz mono s16
@@ -199,7 +200,8 @@ def _to_wav(path, workdir):
     res = subprocess.run(
         ["ffmpeg", "-nostdin", "-y", "-i", path, "-vn",
          "-ac", "1", "-ar", str(RATE), "-c:a", "pcm_s16le", out],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        **plat.quiet(),
     )
     if res.returncode != 0 or not os.path.exists(out):
         tail = (res.stderr or "").strip().splitlines()

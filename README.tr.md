@@ -5,8 +5,8 @@
 eksik noktalama), sonuç panoya kopyalanır ve o an yazdığın pencereye
 yapıştırılır. Yazıya çevirme için OpenAI ve OpenRouter da seçenek olarak duruyor.
 
-KDE Plasma 6 / Wayland için yazıldı. Sistem paketleri dışında bağımlılığı yok:
-sadece Python standart kütüphanesi ve PyQt6.
+KDE Plasma 6 / Wayland üzerinde ve Windows 10/11'de çalışır. Sistem paketleri
+dışında bağımlılığı yok: sadece Python standart kütüphanesi ve PyQt6.
 
 *[English README](README.md)*
 
@@ -21,6 +21,8 @@ sadece Python standart kütüphanesi ve PyQt6.
 
 ## Kurulum
 
+### Linux
+
 ```sh
 sudo pacman -S --needed pipewire-audio wl-clipboard ydotool ffmpeg python-pyqt6
 sudo pacman -S --needed whisper-cpp      # yerel sesten yazıya
@@ -34,11 +36,35 @@ dikte                        # ilk açılışta ayarlar penceresi gelir
 `install.sh` `dikte` komutunu, menü girdisini, oturum açılışında otomatik
 başlatmayı ve KDE kısayolunu kurar.
 
+### Windows
+
+```powershell
+winget install Python.Python.3.12
+winget install Gyan.FFmpeg              # mikrofonu kaydeden şey bu
+pip install PyQt6
+
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+dikte                                   # ilk açılışta ayarlar penceresi gelir
+```
+
+Yerel sesten yazıya için bir [whisper.cpp
+sürümü](https://github.com/ggml-org/whisper.cpp/releases) indir; klasörünü ya
+`PATH`'e ekle ya da Ayarlar → Yerel whisper altında `whisper-server.exe`
+dosyasını göster. NVIDIA kartta CUDA yapısı olanı al. Ya da hiç kurma, yazıya
+çevirmeyi OpenAI veya OpenRouter üzerinden yap — o zaman kurulacak bir şey
+kalmıyor.
+
+`install.ps1` `dikte` komutunu, Başlat menüsü girdisini ve oturum açılışında
+otomatik başlatmayı kurar, yol boyunca da bağımlılıkları kontrol eder. Kısayolu
+Dikte çalışırken kendisi kaydeder, yani onun için kurulacak bir şey ve
+beklenecek bir oturum yok; `install.ps1 "Ctrl+Alt+Space"` farklı bir
+kombinasyonu ayarlara yazar.
+
 Sesi yazıya çevirme varsayılan olarak yerelde, whisper.cpp üzerinde çalışır.
 Ayarlar → API ve modeller altından bir model seçip **İndir**'e bas: varsayılan
 `large-v3-turbo` (1,5 GB), liste `tiny`'den `large-v3`'e kadar gidiyor. Modeller
-`~/.local/share/dikte/models` altına iner. Ses makineden çıkmıyor ve dikte başına
-bir maliyeti yok.
+`~/.local/share/dikte/models`, Windows'ta `%LOCALAPPDATA%\dikte\models` altına
+iner. Ses makineden çıkmıyor ve dikte başına bir maliyeti yok.
 
 Temizleme, seçtiğine göre **DeepSeek** (`deepseek-v4-flash`) ya da **OpenRouter**
 (`google/gemini-3.5-flash-lite`) üzerinde çalışır; aynı seçim toplantı tutanağını
@@ -46,8 +72,9 @@ da yazar. Temizlemeyi tamamen kapatabilirsin, o zaman ham transkript
 yapıştırılır. Yazıya çevirmeyi aynı sekmeden **OpenAI** ya da **OpenRouter**'a
 taşıyabilirsin — kendi üstünde model çalıştırmak istemeyen makine için.
 Anahtarları boş bırakırsan `OPENAI_API_KEY`, `OPENROUTER_API_KEY` ve
-`DEEPSEEK_API_KEY` kullanılır; `~/.config/dikte/config.json` içinde saklanır,
-izinler 600.
+`DEEPSEEK_API_KEY` kullanılır; `~/.config/dikte/config.json` içinde 600
+izinleriyle, Windows'ta ise kendi profilinin içindeki
+`%APPDATA%\dikte\config.json` içinde saklanır.
 
 DeepSeek hakkında bilinmesi gereken bir şey var: aksi söylenmedikçe düşünüyor, ve
 temizleme düşünmeye değecek bir iş değil. Aşağıdaki örnekte ölçüldü: düşünme aynı
@@ -68,8 +95,19 @@ tutanağı ise düşünmeye bırakıyor.
 | Güncelleme sonrası yeniden yükle | Tepsi menüsü → *Yeniden başlat*, ya da `dikte restart` |
 | Çık | Tepsi menüsü → *Çık*, ya da `dikte quit` |
 
-Ekranın köşesindeki gösterge kırmızı kayıt noktasını, canlı ses dalgasını ve
-süreyi, ardından hangi aşamada olduğunu gösterir. Odak almaz. Dikte çalışırken
+Ekranın kenarında duran bir küre var; konuştuğun şey odur. Sen konuşurken
+canlanır ve sesinle birlikte büyür, cümleyi *sen daha söylerken* yanındaki
+balona yazar, sonra da onunla ne yaptığını söyler: yapıştırdığı metni ya da
+ajanın cevabını. Balonlar okunacak metnin uzunluğuna göre üç ile otuz saniye
+arasında kalır. Kenar boyunca istediğin yere sürükleyebilirsin; kısayola basmak
+yerine üstüne tıklayabilirsin. Boyu, hangi kenarda duracağı ve balonların ne
+kadar kalacağı Ayarlar → Karakter altında; kapattığında her şey eski haline
+döner.
+
+Arkasında, ekranın köşesindeki gösterge kırmızı kayıt noktasını, canlı ses
+dalgasını ve süreyi, ardından hangi aşamada olduğunu gösterir — karakter
+açıkken o şerit susar, çünkü aynı dikteyi ekranın iki ucundan birden bildiren
+iki şey bir fazladır. Odak almaz. Dikte çalışırken
 `Ctrl+Space`'e tekrar basmak bir şey yapmaz, sıraya da girmez. Dikte ile ajana
 verilen komut yalnızca mikrofon için birbirini bekler, o da tek aygıt olduğu
 için; başka hiçbir şeyde beklemezler. Her birinin kendi göstergesi var, ikisi
@@ -77,6 +115,20 @@ birden ekrandayken ikincisi birincinin üstüne yerleşir.
 
 ## Neler yapıyor
 
+- **Cümle, daha söylenirken geri okunuyor.** Saniyede bir, o ana kadar
+  kaydedilmiş ses aynı whisper.cpp sunucusuna gidiyor ve dönen metin balondaki
+  önceki tahminin yerini alıyor. Ne akış modeli var ne de ikinci bir kod yolu:
+  bu iş, makinenin konuşmadan çok daha hızlı olması sayesinde yürüyor — bu
+  yazının yazıldığı RTX 4060'ta ölçülen hız gerçek zamanın kırk ila altmış katı,
+  yani yarım kalmış bir cümle söylenme süresinin çok küçük bir kesrinde yeniden
+  okunuyor. Pencere yerine metnin tamamının her seferinde yeniden okunması,
+  bağlam geldikçe tahminin düzelmesini sağlayan şey; önizlemenin gözle görülür
+  biçimde kendini düzeltmesinin ("paye tuta" bir saniye sonra "PyQt" oluyor)
+  sebebi de bu — canlı altyazı yazan herkesin yaptığı gibi. Bunların hiçbiri
+  panoya ulaşmıyor: yapıştırılan, temizlenen ya da ajana giden metin her zaman
+  sen bitirdikten sonra yapılan tam çevirinin sonucu. Yalnızca yerel whisper'da
+  çalışıyor, çünkü bulut sağlayıcısında her konuşma saniyesi hem para hem
+  gecikme demek olurdu.
 - **Yazıya çevirme bu makinede.** whisper.cpp, Dikte'nin yanında bir sunucu
   olarak ayakta tutuluyor ve bulut sağlayıcılarının kullandığı
   `/v1/audio/transcriptions` yoluna oturtuluyor; ikinci bir kod yolu değil de
@@ -122,7 +174,8 @@ birden ekrandayken ikincisi birincinin üstüne yerleşir.
   ayrı ayrı yazıya çevrilip tek bir zaman damgalı transkriptte birleştirilir,
   ardından Ayarlar → Toplantı sekmesinden seçtiğin ikinci bir model kendi
   talimatıyla bunu tutanağa çevirir: kararlar, aksiyonlar, açık sorular. Sonuç
-  `~/.local/share/dikte/meetings` altına ve Ayarlar → Tutanaklar sekmesine
+  `~/.local/share/dikte/meetings` (`%LOCALAPPDATA%\dikte\meetings`) altına ve
+  Ayarlar → Tutanaklar sekmesine
   düşer. Yarıda kalan bir işlem ses kaydını saklar, yeniden denemede parası
   ödenmiş transkriptin üstünden devam eder.
 - **Ses ve video dosyaları** Ayarlar → Ses dosyası sekmesinde aynı modellerden
@@ -134,7 +187,7 @@ birden ekrandayken ikincisi birincinin üstüne yerleşir.
   silebilirsin.
 - **Türkçe ve İngilizce arayüz**, varsayılan olarak sistem dilini izler.
 
-## Global kısayol için bir kez oturum kapatmak gerekir
+## KDE'de global kısayol için bir kez oturum kapatmak gerekir
 
 KWin `kglobalshortcutsrc` dosyasını yalnızca açılışta okur, yani `install.sh`'ın
 yazdığı kısayol oturumu yeniden açana kadar tetiklenmez. O zamana kadar Ayarlar →
@@ -143,11 +196,42 @@ yakalar. Tek farkı: tuşu yutmaz, yani `Ctrl+Space` odaktaki uygulamaya da ilet
 (bazı editörlerde otomatik tamamlama açılabilir). Dinleyici kullanıcının `input`
 grubunda olmasını gerektirir: `sudo usermod -aG input $USER`.
 
+Windows'ta bunların hiçbiri geçerli değil; orada mekanizmanın tamamı
+`RegisterHotKey`: Dikte kombinasyonu çalışırken sistemden ister ve açıldığı
+andan itibaren elinde tutar — oturum kapatmak gerekmez, Dikte tuşu tuttuğu
+sürece masaüstünde başka hiçbir şey onu görmez. Bunun öbür yüzü şu: başka bir
+uygulamanın zaten tuttuğu bir kombinasyon hiç alınamaz. Öyle bir durumda Ayarlar
+→ Kısayol bunu söyler, cevabı da başka bir kombinasyon seçmektir.
+
+## Windows'ta ne farklı
+
+- **Mikrofon ffmpeg üzerinden gelir**, DirectShow girişinden, çünkü pw-record
+  yok. Bunun anlamı şu: kayıt, tuşa bastıktan yaklaşık üçte bir saniye sonra
+  başlar — bir DirectShow aygıtını açmanın maliyeti bu, göstergenin ilk örnek
+  gelmeden görünmesi de bunun gözle görülen tarafı. Bas, yarım an bekle, sonra
+  konuş.
+- **Toplantı için bir loopback aygıtının var olması gerekir.** Her PipeWire
+  çıkışının kayıt alınabilecek bir `.monitor` kaynağı vardır; Windows'ta ise
+  ancak ses kartı "Stereo Karışımı" sunuyorsa ve biri Ses → Kayıt altında bunu
+  açtıysa, ya da VB-CABLE gibi bir sanal kablo kuruluysa vardır. Hiç yoksa
+  Ayarlar → Toplantı bunu söyler; bir saatin yarısı boş kaydedilmesindense.
+  Dikte için bunların hiçbiri gerekmiyor.
+- **Pano ve tuş basışı sistemin kendisinindir**, wl-clipboard ve ydotool yerine
+  user32 üzerinden, yani kurulacak bir şey ve ayakta tutulacak bir servis yok.
+  Beraberinde bir sınır geliyor: yönetici olarak çalışan bir pencere, üretilmiş
+  bir tuş basışını ancak yönetici olarak çalışan bir uygulamadan kabul eder;
+  öyle bir pencereye otomatik yapıştırma için Dikte'nin de öyle açılması gerekir.
+- **Tepsi simgesi tema yerine çizilir**, çünkü Windows'ta simge teması yok:
+  beklerken mavi mikrofon, kaydederken kırmızı nokta, çalışırken kehribar halka.
+
 ## Dosyalar
 
 ```
 dikte.py          giriş noktası, tepsi simgesi, durum makinesi, IPC
-audio.py          PCM kaydı: diktede pw-record, toplantıda ffmpeg
+plat.py           iki platformun farklı yaptığı şeyler, tek yerde
+companion.py      ekranın kenarındaki küre ve balonları
+live.py           o ana kadarki sesi, konuşma sürerken yeniden okuma
+audio.py          PCM kaydı: pw-record ya da ffmpeg, ve aygıt listeleri
 meeting.py        kanal ayırma, konuşmacı etiketi, temizleme, tutanak
 assistant.py      dikteyi Claude Code, Codex ya da OpenRouter'dan geçirme
 api.py            her sağlayıcıda transkript + OpenRouter temizleme (yalnız stdlib)
@@ -156,14 +240,16 @@ worker.py         transkript → temizleme → pano → yapıştırma
 vad.py            kayıtta gerçekten konuşma var mı kararı
 filetranscribe.py dosyadan transkript: ffmpeg, parçalama, zaman damgaları
 overlay.py        köşedeki gösterge
+icons.py          tepsi simgesi: Linux'ta temadan, Windows'ta çizilmiş
 settings_ui.py    ayarlar penceresi
-hotkey.py         KDE kısayol kurulumu ve evdev dinleyici
-paste.py          wl-clipboard ve ydotool sarmalayıcıları
+hotkey.py         KDE kısayolu, evdev dinleyici, RegisterHotKey
+paste.py          pano ve tuş basışı, her iki platformda
 i18n.py           metin tablosu
 ```
 
-Gösterge XWayland üzerinden çizilir; Wayland'da bir pencereyi belirli bir köşeye
-yerleştirmenin yolu yok, `dikte.py` bu yüzden `QT_QPA_PLATFORM=xcb` ayarlar.
+Wayland'da gösterge XWayland üzerinden çizilir; orada bir pencereyi belirli bir
+köşeye yerleştirmenin yolu yok, `dikte.py` bu yüzden `QT_QPA_PLATFORM=xcb`
+ayarlar ve başka her yerde ona dokunmaz.
 
 ## Lisans
 

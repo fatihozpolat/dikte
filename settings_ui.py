@@ -20,6 +20,7 @@ import config as cfg
 import filetranscribe
 import hotkey
 import meeting
+import plat
 import whispercpp
 from filetranscribe import FileTranscriber
 from i18n import t
@@ -145,6 +146,7 @@ class SettingsWindow(QDialog):
 
         tabs = QTabWidget(self)
         tabs.addTab(self._general_tab(), t("General"))
+        tabs.addTab(self._companion_tab(), t("Character"))
         tabs.addTab(self._api_tab(), t("API and models"))
         tabs.addTab(self._prompt_tab(), t("Cleanup rules"))
         tabs.addTab(self._assistant_tab(), t("Agent"))
@@ -251,9 +253,107 @@ class SettingsWindow(QDialog):
         )
         form.addRow("", self.filter_hallucinations)
 
-        self.keep_audio = QCheckBox(t("Keep audio files (~/.local/share/dikte/recordings)"))
+        self.keep_audio = QCheckBox(t("Keep audio files ({path})",
+                                      path=cfg.RECORDINGS_DIR))
         form.addRow("", self.keep_audio)
         return page
+
+    def _companion_tab(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+
+        intro = QLabel(t(
+            "A sphere that stays on the edge of the screen: it lights up while "
+            "you talk, writes what it heard in a bubble beside it, and says what "
+            "it did with it. Drag it anywhere along the edge; click it to start "
+            "or stop talking."
+        ))
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        self.companion_enabled = QCheckBox(t("Show the character"))
+        layout.addWidget(self.companion_enabled)
+
+        box = QGroupBox(t("Where it sits"))
+        form = QFormLayout(box)
+        self.companion_side = QComboBox()
+        for label, value in ((t("Right edge"), "right"), (t("Left edge"), "left")):
+            self.companion_side.addItem(label, value)
+        form.addRow(t("Side"), self.companion_side)
+
+        self.companion_size = QSpinBox()
+        self.companion_size.setRange(64, 320)
+        self.companion_size.setSingleStep(8)
+        self.companion_size.setSuffix(" px")
+        form.addRow(t("Size"), self.companion_size)
+
+        recentre = QPushButton(t("Put it back in the middle"))
+        recentre.clicked.connect(self._recentre_companion)
+        form.addRow("", recentre)
+
+        self.companion_replaces = QCheckBox(
+            t("Let it replace the corner indicator")
+        )
+        self.companion_replaces.setToolTip(t(
+            "On, the character is the only thing reporting. Off, the corner strip "
+            "keeps showing the waveform and the elapsed time as well."
+        ))
+        form.addRow("", self.companion_replaces)
+        layout.addWidget(box)
+
+        bubbles = QGroupBox(t("Bubbles"))
+        bubble_form = QFormLayout(bubbles)
+        self.companion_bubble_min = QSpinBox()
+        self.companion_bubble_min.setRange(1, 60)
+        self.companion_bubble_min.setSuffix(t(" s"))
+        bubble_form.addRow(t("Shortest"), self.companion_bubble_min)
+        self.companion_bubble_max = QSpinBox()
+        self.companion_bubble_max.setRange(2, 300)
+        self.companion_bubble_max.setSuffix(t(" s"))
+        bubble_form.addRow(t("Longest"), self.companion_bubble_max)
+        span = QLabel(t(
+            "How long a bubble stays is worked out from how much there is to "
+            "read, between these two."
+        ))
+        span.setWordWrap(True)
+        bubble_form.addRow(span)
+        layout.addWidget(bubbles)
+
+        live = QGroupBox(t("While you are still talking"))
+        live_form = QFormLayout(live)
+        self.companion_live = QCheckBox(t("Write the sentence as it is spoken"))
+        live_form.addRow("", self.companion_live)
+        self.companion_live_note = QLabel("")
+        self.companion_live_note.setWordWrap(True)
+        live_form.addRow(self.companion_live_note)
+        layout.addWidget(live)
+
+        layout.addStretch(1)
+        return page
+
+    def _recentre_companion(self):
+        """Forget where it was dragged to. Written straight out rather than
+        waiting for Save: it is a position, not a preference being edited."""
+        self.conf["companion_offset"] = 0
+        try:
+            self.conf.save()
+        except OSError:
+            pass
+        self.applied.emit()
+
+    def _refresh_companion_note(self):
+        """Say plainly when the live preview cannot run, rather than let the
+        checkbox sit there ticked and doing nothing."""
+        local = self.transcribe_provider.currentData() == "local"
+        self.companion_live.setEnabled(local)
+        self.companion_live_note.setText(t(
+            "The audio so far is read back on the local whisper.cpp server about "
+            "once a second. What gets pasted is always the full pass made after "
+            "you stop, never the preview."
+        ) if local else t(
+            "Only available with local whisper: on OpenAI or OpenRouter every "
+            "second of talking would be a paid request. Settings → API and models."
+        ))
 
     def _api_tab(self):
         page = QWidget()
@@ -350,8 +450,12 @@ class SettingsWindow(QDialog):
         )
         local_form.addRow(t("Threads"), self.local_threads)
 
+        # fromLocalFile rather than "file://" spelled by hand: a Windows path
+        # starts with a drive letter and has backslashes in it, and neither
+        # survives being pasted into a URL.
         models_link = QLabel(
-            f'<a href="file://{whispercpp.models_dir()}">{whispercpp.models_dir()}</a>'
+            f'<a href="{QUrl.fromLocalFile(str(whispercpp.models_dir())).toString()}">'
+            f'{whispercpp.models_dir()}</a>'
         )
         models_link.setOpenExternalLinks(True)
         models_link.setWordWrap(True)
@@ -440,12 +544,9 @@ class SettingsWindow(QDialog):
         how = QGroupBox(t("How it runs"))
         how_form = QFormLayout(how)
         self.assistant_shortcut = self._shortcut_box(t("none"))
-        install = QPushButton(t("Install as a KDE shortcut"))
-        install.clicked.connect(self._install_ask_shortcut)
-        remove = QPushButton(t("Remove"))
-        remove.clicked.connect(self._remove_ask_shortcut)
-        how_form.addRow(t("Shortcut"),
-                        self._row(self.assistant_shortcut, install, remove))
+        how_form.addRow(t("Shortcut"), self._shortcut_row(
+            self.assistant_shortcut,
+            self._install_ask_shortcut, self._remove_ask_shortcut))
         self.assistant_shortcut_status = QLabel("")
         self.assistant_shortcut_status.setWordWrap(True)
         how_form.addRow(self.assistant_shortcut_status)
@@ -627,6 +728,19 @@ class SettingsWindow(QDialog):
             self.meeting_system.addItem(desc, name)
         sources_form.addRow(t("The other participants"), self.meeting_system)
 
+        if plat.WINDOWS and not audio.default_monitor():
+            # Every Linux output has a monitor to record from. Windows has one
+            # only if the sound card offers it and somebody switched it on, and
+            # a meeting started without one fails at the moment it matters.
+            missing = QLabel(t(
+                "Nothing on this machine can record what the speakers are "
+                "playing. Turn on “Stereo Mix” under Sound → Recording (right "
+                "click → Show disabled devices), or install a virtual cable such "
+                "as VB-CABLE, then pick it above."
+            ))
+            missing.setWordWrap(True)
+            sources_form.addRow(missing)
+
         note = QLabel(t(
             "Wear headphones if you can. Through speakers your microphone hears "
             "the other side as well, and although a line that lands on both "
@@ -702,12 +816,9 @@ class SettingsWindow(QDialog):
         recording_form.addRow("", self.meeting_keep_audio)
 
         self.meeting_shortcut = self._shortcut_box(t("none"))
-        install = QPushButton(t("Install as a KDE shortcut"))
-        install.clicked.connect(self._install_meeting_shortcut)
-        remove = QPushButton(t("Remove"))
-        remove.clicked.connect(self._remove_meeting_shortcut)
-        recording_form.addRow(t("Shortcut"),
-                              self._row(self.meeting_shortcut, install, remove))
+        recording_form.addRow(t("Shortcut"), self._shortcut_row(
+            self.meeting_shortcut,
+            self._install_meeting_shortcut, self._remove_meeting_shortcut))
         self.meeting_shortcut_status = QLabel("")
         self.meeting_shortcut_status.setWordWrap(True)
         recording_form.addRow(self.meeting_shortcut_status)
@@ -856,35 +967,26 @@ class SettingsWindow(QDialog):
         form.addRow(t("Shortcut"), self.shortcut)
         layout.addLayout(form)
 
-        install = QPushButton(t("Install as a KDE shortcut"))
-        install.clicked.connect(self._install_shortcut)
-        remove = QPushButton(t("Remove"))
-        remove.clicked.connect(self._remove_shortcut)
-        row = QHBoxLayout()
-        row.addWidget(install)
-        row.addWidget(remove)
-        row.addStretch(1)
-        layout.addLayout(row)
+        if hotkey.native_shortcuts():
+            install = QPushButton(t("Install as a KDE shortcut"))
+            install.clicked.connect(self._install_shortcut)
+            remove = QPushButton(t("Remove"))
+            remove.clicked.connect(self._remove_shortcut)
+            row = QHBoxLayout()
+            row.addWidget(install)
+            row.addWidget(remove)
+            row.addStretch(1)
+            layout.addLayout(row)
 
         self.shortcut_status = QLabel("")
         self.shortcut_status.setWordWrap(True)
         layout.addWidget(self.shortcut_status)
 
-        self.evdev_enabled = QCheckBox(t(
-            "Use the built-in listener (/dev/input), for when the KDE shortcut is "
-            "not active yet"
-        ))
-        self.evdev_enabled.setToolTip(t(
-            "Works immediately, no session restart. The only difference: the key "
-            "combination also reaches the focused application."
-        ))
+        self.evdev_enabled = QCheckBox(hotkey.listener_label())
+        self.evdev_enabled.setToolTip(hotkey.listener_hint())
         layout.addWidget(self.evdev_enabled)
 
-        note = QLabel(t(
-            "KWin only reads shortcut settings at startup. After 'Install' the "
-            "shortcut shows up under System Settings → Shortcuts, but it will not "
-            "fire until you log out and back in. Until then, use the built-in listener."
-        ))
+        note = QLabel(hotkey.shortcut_note())
         note.setWordWrap(True)
         layout.addWidget(note)
         layout.addStretch(1)
@@ -974,6 +1076,22 @@ class SettingsWindow(QDialog):
         holder.setLayout(layout)
         return holder
 
+    def _shortcut_row(self, box, install_slot, remove_slot):
+        """The shortcut field, with the buttons that install it where there is
+        somewhere to install it to.
+
+        On Windows there is not: the listener registers the combination with the
+        system directly, and a pair of buttons that could only ever say so would
+        be two more things to read and nothing to do.
+        """
+        if not hotkey.native_shortcuts():
+            return box
+        install = QPushButton(t("Install as a KDE shortcut"))
+        install.clicked.connect(install_slot)
+        remove = QPushButton(t("Remove"))
+        remove.clicked.connect(remove_slot)
+        return self._row(box, install, remove)
+
     # ---- load / save ----------------------------------------------------
 
     def _load(self):
@@ -990,6 +1108,14 @@ class SettingsWindow(QDialog):
         self.silence_db.setValue(int(conf["silence_db"]))
         self.filter_hallucinations.setChecked(conf["filter_hallucinations"])
         self.keep_audio.setChecked(conf["keep_audio"])
+
+        self.companion_enabled.setChecked(conf["companion_enabled"])
+        self._select_data(self.companion_side, conf["companion_side"])
+        self.companion_size.setValue(int(conf["companion_size"]))
+        self.companion_replaces.setChecked(conf["companion_replaces_overlay"])
+        self.companion_bubble_min.setValue(int(conf["companion_bubble_min"]))
+        self.companion_bubble_max.setValue(int(conf["companion_bubble_max"]))
+        self.companion_live.setChecked(conf["companion_live"])
 
         self.openai_key.setText(conf["openai_api_key"])
         self.openrouter_key.setText(conf["openrouter_api_key"])
@@ -1062,6 +1188,7 @@ class SettingsWindow(QDialog):
         self._refresh_meeting_shortcut_status()
         self._refresh_ask_shortcut_status()
         self._refresh_assistant_status()
+        self._refresh_companion_note()
         self._load_history()
         self._load_minutes()
 
@@ -1079,6 +1206,18 @@ class SettingsWindow(QDialog):
         conf["silence_db"] = float(self.silence_db.value())
         conf["filter_hallucinations"] = self.filter_hallucinations.isChecked()
         conf["keep_audio"] = self.keep_audio.isChecked()
+
+        conf["companion_enabled"] = self.companion_enabled.isChecked()
+        conf["companion_side"] = self.companion_side.currentData() or "right"
+        conf["companion_size"] = self.companion_size.value()
+        conf["companion_replaces_overlay"] = self.companion_replaces.isChecked()
+        # The shorter of the two is the floor whichever way round they are typed;
+        # a ceiling under the floor would pin every bubble to one length.
+        floor = self.companion_bubble_min.value()
+        ceiling = self.companion_bubble_max.value()
+        conf["companion_bubble_min"] = min(floor, ceiling)
+        conf["companion_bubble_max"] = max(floor, ceiling)
+        conf["companion_live"] = self.companion_live.isChecked()
 
         conf["openai_api_key"] = self.openai_key.text().strip()
         conf["openrouter_api_key"] = self.openrouter_key.text().strip()
@@ -1222,6 +1361,9 @@ class SettingsWindow(QDialog):
         self.refresh_transcribe_models.setVisible(not local)
         self.download_model.setVisible(local)
         self.local_box.setVisible(local)
+        # The live preview lives or dies by this choice, and the Character tab
+        # should not have to be visited to find that out.
+        self._refresh_companion_note()
         if local:
             self._refresh_local_status()
         else:
@@ -1602,7 +1744,21 @@ class SettingsWindow(QDialog):
         hotkey.remove_kde_shortcut()
         self._refresh_shortcut_status()
 
+    def _listener_state(self, box, none_text):
+        """What to say under a shortcut field where there is no registry.
+
+        The listener is the whole mechanism on Windows, so the only thing worth
+        reporting is which combination it is being asked to hold.
+        """
+        combo = box.currentText().strip()
+        return (t("The listener registers {shortcut} with the system.",
+                  shortcut=combo) if combo else none_text)
+
     def _refresh_shortcut_status(self):
+        if not hotkey.native_shortcuts():
+            self.shortcut_status.setText(self._listener_state(
+                self.shortcut, t("No combination set.")))
+            return
         current = hotkey.kde_shortcut_status()
         self.shortcut_status.setText(
             t("Registered in KDE: {shortcut}", shortcut=current) if current
@@ -1639,6 +1795,11 @@ class SettingsWindow(QDialog):
         self._refresh_meeting_shortcut_status()
 
     def _refresh_meeting_shortcut_status(self):
+        if not hotkey.native_shortcuts():
+            self.meeting_shortcut_status.setText(self._listener_state(
+                self.meeting_shortcut,
+                t("No combination set. The tray menu starts a meeting too.")))
+            return
         current = hotkey.kde_shortcut_status(hotkey.MEETING_DESKTOP_ID)
         self.meeting_shortcut_status.setText(
             t("Registered in KDE: {shortcut}", shortcut=current) if current
@@ -1677,6 +1838,11 @@ class SettingsWindow(QDialog):
         self._refresh_ask_shortcut_status()
 
     def _refresh_ask_shortcut_status(self):
+        if not hotkey.native_shortcuts():
+            self.assistant_shortcut_status.setText(self._listener_state(
+                self.assistant_shortcut,
+                t("No combination set. The tray menu asks it too.")))
+            return
         current = hotkey.kde_shortcut_status(hotkey.ASK_DESKTOP_ID)
         self.assistant_shortcut_status.setText(
             t("Registered in KDE: {shortcut}", shortcut=current) if current
@@ -1693,6 +1859,7 @@ class SettingsWindow(QDialog):
     def _refresh_assistant_status(self):
         provider = self.assistant_provider.currentData() or "claude"
         binary = assistant.executable(provider)
+        # which() reads PATHEXT, so this also finds claude.cmd or claude.exe.
         found = shutil.which(binary) if binary else ""
         if not binary:
             self.assistant_found.setText(

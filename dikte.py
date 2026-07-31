@@ -19,6 +19,7 @@ import contextlib
 import os
 import signal
 import socket
+import subprocess
 import sys
 import threading
 
@@ -28,7 +29,7 @@ if os.environ.get("XDG_SESSION_TYPE") == "wayland" and os.environ.get("DISPLAY")
     os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
 
 from PyQt6.QtCore import QTimer, QElapsedTimer, QSocketNotifier  # noqa: E402
-from PyQt6.QtGui import QAction, QIcon  # noqa: E402
+from PyQt6.QtGui import QAction  # noqa: E402
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket  # noqa: E402
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon  # noqa: E402
 
@@ -37,15 +38,19 @@ import audio  # noqa: E402
 import config as cfg  # noqa: E402
 import hotkey  # noqa: E402
 import i18n  # noqa: E402
+import icons  # noqa: E402
 import meeting  # noqa: E402
+import plat  # noqa: E402
 import whispercpp  # noqa: E402
+from companion import Companion  # noqa: E402
 from i18n import t  # noqa: E402
+from live import LiveTranscriber  # noqa: E402
 from meeting import MeetingPipeline  # noqa: E402
 from overlay import Overlay  # noqa: E402
 from settings_ui import SettingsWindow  # noqa: E402
 from worker import Pipeline  # noqa: E402
 
-SERVER_NAME = "dikte-" + str(os.getuid())
+SERVER_NAME = "dikte-" + plat.user_tag()
 IDLE, RECORDING, BUSY = "idle", "recording", "busy"
 # Dictation and a command for the agent are two runs of the same machinery, kept
 # apart so that neither waits on the other: an agent can spend a minute thinking,
@@ -80,30 +85,42 @@ class Dikte:
         self.meeting_message = ""
         self.settings_window = None
         self._quitting = False
+        # Set by restart() on Windows, acted on by main() after the event loop.
+        self._relaunch = False
 
         self.overlay = Overlay(self.conf["overlay_corner"])
         # The agent's indicator sits on top of the dictation one when both are
         # up, and drops into the corner when it is alone there.
         self.ask_overlay = Overlay(self.conf["overlay_corner"], below=self.overlay,
                                    dismissable=True)
+        # The character is one thing for the whole application, where the corner
+        # indicators are one per job: it is a place on the screen rather than a
+        # report, and two of them would be two assistants.
+        self.companion = Companion(self.conf)
         self.recorder = audio.Recorder()
+        self.live = LiveTranscriber(self.conf, self.recorder)
         self.pipeline = Pipeline(self.conf)
         self.ask_pipeline = Pipeline(self.conf)
         self.meeting_recorder = audio.MeetingRecorder()
         self.meetings = MeetingPipeline(self.conf)
-        self.evdev = hotkey.EvdevHotkey()
+        self.evdev = hotkey.Hotkey()
         # Before anything is started: a server from a Dikte that was killed
         # outright is still holding the model in memory.
         whispercpp.sweep()
         self._apply_local_whisper()
+        # Working out which sound devices there are costs a quarter of a second
+        # on Windows, and it should not be the first dictation that pays it.
+        threading.Thread(target=audio.warm_devices, daemon=True).start()
 
         self.recorder.level.connect(self._on_level)
         self.recorder.stopped.connect(self._on_recorded)
         self.recorder.failed.connect(self._on_recorder_error)
         self.pipeline.stage.connect(self.overlay.show_busy)
+        self.pipeline.stage.connect(self.companion.show_busy)
         self.pipeline.finished.connect(self._on_finished)
         self.pipeline.failed.connect(self._on_error)
         self.ask_pipeline.stage.connect(self.ask_overlay.show_busy)
+        self.ask_pipeline.stage.connect(self.companion.show_busy)
         self.ask_pipeline.finished.connect(self._on_ask_finished)
         self.ask_pipeline.failed.connect(self._on_ask_error)
         self.ask_pipeline.cancelled.connect(self._on_ask_cancelled)
@@ -116,6 +133,9 @@ class Dikte:
         self.meetings.failed.connect(self._on_meeting_failed)
         self.evdev.triggered.connect(self._on_evdev)
         self.evdev.failed.connect(self._on_error)
+        self.live.partial.connect(self.companion.live)
+        self.companion.clicked.connect(self._companion_clicked)
+        self.companion.moved.connect(self._companion_moved)
         # Started here as well as when the settings are saved: the listener is
         # a setting like any other, and one that only came on after a visit to
         # the settings window would be off again after the next restart —
@@ -208,10 +228,7 @@ class Dikte:
             self._toggle()
 
     def _set_icon(self, name):
-        icon = QIcon.fromTheme(name)
-        if icon.isNull():
-            icon = QIcon.fromTheme("audio-input-microphone")
-        self.tray.setIcon(icon)
+        self.tray.setIcon(icons.tray_icon(name))
 
     # ---- state ----------------------------------------------------------
 
@@ -321,8 +338,13 @@ class Dikte:
         # that same press. Its lateness is also the proof we were waiting for
         # that the shortcut is live, which leaves the listener with nothing to
         # do but double every press.
+        #
+        # None of which applies on Windows: the listener holds the combination
+        # exclusively, so there is no second path for a press to arrive by, and
+        # anything that turned the listener off would take the shortcut with it.
         timer = self.last_evdev.get(name)
-        if self.evdev.running and timer is not None and timer.elapsed() < ECHO_MS:
+        if (not plat.WINDOWS and self.evdev.running
+                and timer is not None and timer.elapsed() < ECHO_MS):
             self._retire_listener()
             return
         handler()
@@ -375,6 +397,7 @@ class Dikte:
         if self.state != IDLE or self.recording:
             return
         self.overlay.show_recording()
+        self.companion.show_recording()
         self._begin_recording(DICTATION)
         self._set_state(RECORDING)
 
@@ -382,6 +405,7 @@ class Dikte:
         if self.ask_state != IDLE or self.recording:
             return
         self.ask_overlay.show_recording(asking=True)
+        self.companion.show_recording(asking=True)
         self._begin_recording(ASK)
         self._set_ask_state(RECORDING)
 
@@ -391,21 +415,29 @@ class Dikte:
         self.elapsed.restart()
         self.ticker.start()
         self.recorder.start(self.conf["mic_target"], self.conf["max_seconds"])
+        # After the recorder, and only if it actually started: a preview of a
+        # recording that never began would read an empty buffer for ever.
+        if self.recorder.active and self.companion.visible:
+            self.live.start()
 
     def stop(self):
         if self.state != RECORDING:
             return
         self.ticker.stop()
+        self.live.stop()
         self._set_state(BUSY)
         self.overlay.show_busy(t("Transcribing…"))
+        self.companion.show_busy(t("Transcribing…"))
         self.recorder.stop()
 
     def stop_ask(self):
         if self.ask_state != RECORDING:
             return
         self.ticker.stop()
+        self.live.stop()
         self._set_ask_state(BUSY)
         self.ask_overlay.show_busy(t("Transcribing…"))
+        self.companion.show_busy(t("Transcribing…"))
         self.recorder.stop()
 
     def cancel(self):
@@ -414,8 +446,10 @@ class Dikte:
             return
         asking = self.ask_state == RECORDING
         self.ticker.stop()
+        self.live.stop()
         self.recorder.cancel()
         self.recorder_owner = None
+        self.companion.dismiss()
         if asking:
             self.ask_overlay.dismiss()
             self._set_ask_state(IDLE)
@@ -445,6 +479,7 @@ class Dikte:
 
     def _on_level(self, level):
         self._recording_overlay().push_level(level)
+        self.companion.push_level(level)
 
     def _tick(self):
         seconds = self.elapsed.elapsed() / 1000.0
@@ -477,6 +512,7 @@ class Dikte:
         self.meeting_elapsed.restart()
         self.meeting_ticker.start()
         self.overlay.show_meeting()
+        self.companion.show_meeting()
         QTimer.singleShot(PEEK_MS, self._conceal_meeting_overlay)
         self._set_meeting_state(M_RECORDING)
 
@@ -486,6 +522,7 @@ class Dikte:
         self.meeting_ticker.stop()
         self._set_meeting_state(M_WORKING)
         self.overlay.show_busy(t("Ending the meeting…"))
+        self.companion.show_busy(t("Ending the meeting…"))
         self.meeting_recorder.stop()
 
     def cancel_meeting(self):
@@ -495,6 +532,7 @@ class Dikte:
         self.meeting_recorder.cancel()
         if self.overlay.state == "meeting":
             self.overlay.dismiss()
+        self.companion.dismiss()
         self._set_meeting_state(M_IDLE)
 
     def _conceal_meeting_overlay(self):
@@ -503,6 +541,11 @@ class Dikte:
 
     def _on_meeting_levels(self, mine, theirs):
         self.overlay.push_levels(mine, theirs)
+        # Only while nothing else owns the character: a dictation in the middle
+        # of a meeting is the thing being waited on, and the sphere should be
+        # following that voice rather than the room's.
+        if self.state == IDLE and self.ask_state == IDLE:
+            self.companion.push_levels(mine, theirs)
 
     def _meeting_tick(self):
         seconds = self.meeting_elapsed.elapsed() / 1000.0
@@ -536,9 +579,11 @@ class Dikte:
             )
             return
         self.overlay.show_done(t("Meeting recorded, writing it up…"), 4000)
+        self.companion.show_busy(t("Meeting recorded, writing it up…"))
 
     def _on_meeting_progress(self, _base, message):
         self.meeting_message = message
+        self.companion.stage(message)
         if self.state == IDLE and self.meeting_state == M_WORKING:
             self.tray.setToolTip(message)
 
@@ -546,6 +591,7 @@ class Dikte:
         self._set_meeting_state(M_IDLE)
         doc_path, _ = cfg.meeting_paths(base)
         self.overlay.show_done(t("Meeting written up: {title}", title=title), 5000)
+        self.companion.show_done(t("Meeting written up: {title}", title=title))
         self.tray.showMessage(
             t("Dikte: the meeting is written up"), f"{title}\n{doc_path}",
             QSystemTrayIcon.MessageIcon.Information, 10000,
@@ -555,6 +601,7 @@ class Dikte:
         self._set_meeting_state(M_IDLE)
         first_line = error.strip().splitlines()[0]
         self.overlay.show_error(t("Meeting failed: {error}", error=first_line))
+        self.companion.show_error(t("Meeting failed: {error}", error=error.strip()))
         self.tray.showMessage(
             t("Dikte: the meeting could not be written up"),
             t("{error}\n\nThe recording has been kept. Settings → Minutes can "
@@ -589,10 +636,16 @@ class Dikte:
             self.pipeline.run(wav_path, duration, rms_values)
 
     def _on_finished(self, _raw, text, warning):
+        # The character says the sentence itself rather than a preview of it:
+        # the whole point of the bubble is to be able to read what was heard.
+        self.companion.heard(text)
         if warning:
             # The text was still pasted, but cleanup did not run. Say so loudly:
             # a rejected key otherwise looks exactly like working dictation.
             self.overlay.show_warning(
+                t("Pasted raw, cleanup failed: {error}", error=warning.splitlines()[0])
+            )
+            self.companion.show_warning(
                 t("Pasted raw, cleanup failed: {error}", error=warning.splitlines()[0])
             )
             self.tray.showMessage(
@@ -604,10 +657,15 @@ class Dikte:
             self.overlay.show_done(
                 t("{action}: {preview}", action=action, preview=_preview(text))
             )
+            self.companion.show_done()
         self._set_state(IDLE)
 
-    def _on_ask_finished(self, _raw, text, warning):
+    def _on_ask_finished(self, raw, text, warning):
         agent = assistant.display_name(self.conf)
+        # What was asked, then what came back: two bubbles, in that order, which
+        # is the whole shape of a command to an agent.
+        self.companion.heard(raw)
+        self.companion.say(text, "agent")
         if warning:
             # A tool the agent was not allowed to touch otherwise looks exactly
             # like a job that worked: the reply reads perfectly normal.
@@ -615,6 +673,7 @@ class Dikte:
                 t("{name} answered, but: {error}",
                   name=agent, error=warning.splitlines()[0])
             )
+            self.companion.show_warning(warning.splitlines()[0])
             self.tray.showMessage(
                 t("Dikte: {name} could not do all of it", name=agent),
                 f"{warning}\n\n{text}", QSystemTrayIcon.MessageIcon.Warning, 10000,
@@ -625,16 +684,19 @@ class Dikte:
             self.ask_overlay.show_done(
                 t("{name}: {preview}", name=agent, preview=_preview(text)), 6000
             )
+            self.companion.show_done()
         self._set_ask_state(IDLE)
 
     def _on_ask_cancelled(self):
         self.ask_overlay.show_done(t("Stopped."), 2000)
+        self.companion.show_done(t("Stopped."), 2000)
         self._set_ask_state(IDLE)
 
     def _on_recorder_error(self, message):
         """The microphone itself could not run, so it belongs to whoever asked."""
         owner, self.recorder_owner = self.recorder_owner, None
         self.ticker.stop()
+        self.live.stop()
         (self._on_ask_error if owner == ASK else self._on_error)(message)
 
     def _on_error(self, message):
@@ -648,6 +710,9 @@ class Dikte:
     def _report(self, message, overlay):
         first_line = message.strip().splitlines()[0]
         overlay.show_error(first_line)
+        # The whole message rather than its first line: the character has room
+        # for it, and the reason is usually in the part the corner cuts off.
+        self.companion.show_error(message.strip())
         if len(message) > len(first_line):
             self.tray.showMessage("Dikte", message, QSystemTrayIcon.MessageIcon.Warning, 8000)
 
@@ -697,10 +762,40 @@ class Dikte:
     def _apply_settings(self):
         self.overlay.corner = self.conf["overlay_corner"]
         self.ask_overlay.corner = self.conf["overlay_corner"]
+        self._apply_companion()
         self._apply_local_whisper()
         self._build_tray()
         self._refresh_tray()
         self._apply_hotkeys()
+
+    def _apply_companion(self):
+        """Put the character where the settings say, and hand it the job.
+
+        While it is on it reports on its own, so the corner indicators go quiet
+        rather than saying the same thing from the other side of the screen.
+        Turning it off gives them their voice straight back.
+        """
+        on = bool(self.conf["companion_enabled"])
+        self.companion.apply(self.conf)
+        self.companion.set_visible(on)
+        quiet = on and bool(self.conf["companion_replaces_overlay"])
+        self.overlay.set_enabled(not quiet)
+        self.ask_overlay.set_enabled(not quiet)
+
+    def _companion_clicked(self):
+        """The sphere is a button too: click it to start or stop talking."""
+        if self.ask_state == RECORDING:
+            self._toggle_ask()
+        else:
+            self._toggle()
+
+    def _companion_moved(self, _x, y):
+        self.conf["companion_offset"] = int(y)
+        try:
+            self.conf.save()
+        except OSError as exc:
+            print(f"dikte: could not save the character's position: {exc}",
+                  file=sys.stderr)
 
     def _apply_hotkeys(self):
         if self.conf["evdev_hotkey"]:
@@ -714,6 +809,16 @@ class Dikte:
         """Replace this process with a fresh one, picking up code and settings."""
         if self.settings_window is not None:
             self.settings_window.close()
+        if plat.WINDOWS:
+            # os.execv on Windows does not replace the process the way it does
+            # elsewhere: it starts a new one and ends this one. Started here,
+            # the replacement would reach the IPC socket while this instance is
+            # still listening on it, hand its own startup over as a command and
+            # exit again, leaving nothing running. So it is only asked for, and
+            # main() starts it once the event loop has actually let go.
+            self._relaunch = True
+            self.app.quit()
+            return
         self.shutdown()
         QLocalServer.removeServer(SERVER_NAME)
         script = os.path.realpath(__file__)
@@ -722,6 +827,8 @@ class Dikte:
     def shutdown(self):
         self._quitting = True
         self.evdev.stop()
+        self.live.stop()
+        self.companion.set_visible(False)
         if self.recording:
             self.recorder.cancel()
         # A meeting in progress is closed properly rather than thrown away: the
@@ -749,17 +856,41 @@ def _clock(seconds):
             else f"{minutes}:{secs:02d}")
 
 
+def _gui_python():
+    """The interpreter to start Dikte with: the one without a console window.
+
+    python.exe opens a console; pythonw.exe is the same interpreter without one,
+    and a tray application has nothing to print to it anyway.
+    """
+    if not plat.WINDOWS:
+        return sys.executable
+    windowless = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+    return windowless if os.path.isfile(windowless) else sys.executable
+
+
+def _command(verb):
+    """The command line that hands one word to the running instance.
+
+    Quoted on Windows, where a path through Program Files or a user folder with
+    a space in it is the normal case rather than the awkward one.
+    """
+    exe, script = _gui_python(), os.path.realpath(__file__)
+    if plat.WINDOWS:
+        return f'"{exe}" "{script}" {verb}'
+    return f"{exe} {script} {verb}"
+
+
 def launch_command():
-    """The command the KDE shortcut will run."""
-    return f"{sys.executable} {os.path.realpath(__file__)} toggle"
+    """The command a desktop shortcut would run."""
+    return _command("toggle")
 
 
 def meeting_command():
-    return f"{sys.executable} {os.path.realpath(__file__)} meeting"
+    return _command("meeting")
 
 
 def ask_command():
-    return f"{sys.executable} {os.path.realpath(__file__)} ask"
+    return _command("ask")
 
 
 def send_command(command, timeout=800):
@@ -789,6 +920,11 @@ def install_signal_handlers(app):
     model in graphics memory. SIGKILL cannot be caught at all, which is what
     whispercpp.sweep() is for.
 
+    Windows sends none of these to a windowless application — it ends a session
+    by closing the windows, which Qt already turns into a quit — so there the
+    sweep is doing most of the work and this is only here for a run started
+    from a console.
+
     Returns the objects it made; they have to stay alive to keep working.
     """
     reader, writer = socket.socketpair()
@@ -803,7 +939,10 @@ def install_signal_handlers(app):
         app.quit()          # aboutToQuit runs shutdown()
 
     notifier.activated.connect(woken)
-    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+    signals = [signal.SIGINT, signal.SIGTERM]
+    if hasattr(signal, "SIGHUP"):
+        signals.append(signal.SIGHUP)
+    for sig in signals:
         # A handler that does nothing, so that the default action — stopping
         # the process on the spot — is replaced by the wakeup above.
         signal.signal(sig, lambda *_: None)
@@ -824,12 +963,20 @@ def main():
     app.setApplicationName("Dikte")
     app.setDesktopFileName("dikte")
     app.setQuitOnLastWindowClosed(False)
+    # On Linux the desktop file above is where the icon comes from. Windows has
+    # no such file and would give the settings window the generic Python one.
+    app.setWindowIcon(icons.app_icon())
     # Before Dikte is built, because building it is what starts the whisper.cpp
     # server, and a signal arriving in the middle of that would otherwise take
     # the default action and leave the server behind. A signal this early lands
     # in the socket and is delivered as soon as the event loop starts.
     # Held in a name so the notifier and its socket outlive this function.
-    signal_plumbing = install_signal_handlers(app)  # noqa: F841
+    try:
+        signal_plumbing = install_signal_handlers(app)  # noqa: F841
+    except (OSError, ValueError) as exc:
+        # Windows only allows a socket here, and only from the main thread;
+        # a run that cannot have it is still a run worth having.
+        print(f"dikte: signal handling is off: {exc}", file=sys.stderr)
 
     # No command and an instance already running: bring its settings forward.
     if send_command(command or "settings"):
@@ -894,7 +1041,17 @@ def main():
     elif command == "meeting":
         QTimer.singleShot(0, dikte.toggle_meeting)
 
-    return app.exec()
+    code = app.exec()
+
+    # Out here rather than inside restart(): the socket is closed, the tray icon
+    # is gone and the whisper.cpp server has been stopped, so the fresh instance
+    # finds nothing of this one left to trip over.
+    if dikte._relaunch:
+        server.close()
+        QLocalServer.removeServer(SERVER_NAME)
+        subprocess.Popen([_gui_python(), os.path.realpath(__file__)],
+                         close_fds=True, **plat.quiet())
+    return code
 
 
 if __name__ == "__main__":

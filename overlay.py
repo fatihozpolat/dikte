@@ -44,6 +44,7 @@ class Overlay(QWidget):
         # ten minutes. Clicking such an indicator puts the progress away; the
         # work carries on and its result still shows up.
         self.dismissable = dismissable
+        self.enabled = True
         self.muted = False
         self._stacked = False
         self.state = "idle"
@@ -164,7 +165,21 @@ class Overlay(QWidget):
 
     # ---- internals -----------------------------------------------------
 
+    def set_enabled(self, enabled):
+        """Turn the indicator off without unpicking anything that talks to it.
+
+        The character does this job while it is on, and two things reporting the
+        same dictation from two corners of the screen is one too many. Every
+        show_* call still arrives and simply paints nothing, so switching the
+        character off puts the indicator straight back to work.
+        """
+        self.enabled = bool(enabled)
+        if not self.enabled:
+            self.dismiss()
+
     def _appear(self):
+        if not self.enabled:
+            return
         self._resize_to_content()
         self._reposition()
         if not self.isVisible():

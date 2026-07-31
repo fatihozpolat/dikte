@@ -4,18 +4,36 @@ Source strings are English; Turkish translations live in the TR table below.
 No gettext, no .mo files; the string table is small enough to keep in code.
 """
 
+import locale
 import os
+import sys
 
 _lang = "en"
 
 
+def _system_language():
+    """What the system is set to, as a locale name.
+
+    Windows sets none of the LC_ variables, so it is asked for the language its
+    own interface is in — which is the one the user reads, and the same thing
+    LANG says on the other side.
+    """
+    if sys.platform.startswith("win"):
+        try:
+            import ctypes
+            langid = ctypes.windll.kernel32.GetUserDefaultUILanguage()
+            return locale.windows_locale.get(langid, "")
+        except (OSError, AttributeError, ValueError):
+            return ""
+    return (os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES")
+            or os.environ.get("LANG") or "")
+
+
 def resolve(code):
-    """'auto' -> language guessed from the locale environment."""
+    """'auto' -> language guessed from the system."""
     if code in ("tr", "en"):
         return code
-    env = (os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES")
-           or os.environ.get("LANG") or "")
-    return "tr" if env.lower().startswith("tr") else "en"
+    return "tr" if _system_language().lower().startswith("tr") else "en"
 
 
 def set_language(code):
@@ -112,6 +130,29 @@ TR = {
     "ydotool failed: {error}\nIs ydotoold running? (systemctl --user status ydotool)":
         "ydotool hatası: {error}\nydotoold çalışıyor mu? (systemctl --user status ydotool)",
 
+    # --- audio / paste errors, Windows --------------------------------
+    "ffmpeg not found. Install it to record.":
+        "ffmpeg bulunamadı. Kayıt için kur.",
+    "Could not record: {error}": "Kayıt yapılamadı: {error}",
+    "No microphone was found. Plug one in, or check that Windows lets "
+    "applications use it: Settings → Privacy → Microphone.":
+        "Mikrofon bulunamadı. Bir tane tak ya da Windows'un uygulamaların "
+        "mikrofonu kullanmasına izin verdiğini kontrol et: Ayarlar → Gizlilik → "
+        "Mikrofon.",
+    "Windows has no ready-made way to record what the speakers are playing. "
+    "Turn on “Stereo Mix” in Sound → Recording, or install a virtual cable such "
+    "as VB-CABLE, then pick it under Settings → Meeting.":
+        "Windows'ta hoparlörden çıkan sesi kaydetmenin hazır bir yolu yok. "
+        "Ses → Kayıt bölümünde “Stereo Karışımı”nı aç ya da VB-CABLE gibi bir "
+        "sanal kablo kur, sonra Ayarlar → Toplantı altından seç.",
+    "The clipboard is held by another application. Try again.":
+        "Panoyu başka bir uygulama tutuyor. Tekrar dene.",
+    "The key press did not go through ({error}). A window running as "
+    "administrator only accepts one from an application running as "
+    "administrator too.":
+        "Tuş basışı iletilemedi ({error}). Yönetici olarak çalışan bir pencere, "
+        "yalnızca yönetici olarak çalışan bir uygulamadan tuş kabul eder.",
+
     # --- api errors ----------------------------------------------------
     "{service} API key is empty. Add it in Settings.":
         "{service} API anahtarı boş. Ayarlar'dan gir.",
@@ -159,8 +200,7 @@ TR = {
     " s": " sn",
     "Skip silent recordings": "Sessiz kayıtları atla",
     "Silence threshold": "Sessizlik eşiği",
-    "Keep audio files (~/.local/share/dikte/recordings)":
-        "Ses kayıtlarını sakla (~/.local/share/dikte/recordings)",
+    "Keep audio files ({path})": "Ses kayıtlarını sakla ({path})",
 
     # --- settings: api --------------------------------------------------
     "Keys": "Anahtarlar",
@@ -252,6 +292,12 @@ TR = {
         "{model} indirildi. Kullanmak için Kaydet'e basın.",
     "whisper.cpp is not installed. Install it with: sudo pacman -S whisper-cpp":
         "whisper.cpp kurulu değil. Kurmak için: sudo pacman -S whisper-cpp",
+    "whisper.cpp is not installed. Download a whisper.cpp release "
+    "(whisper-server.exe) and point Settings → Local whisper at it, or put its "
+    "folder on PATH.":
+        "whisper.cpp kurulu değil. Bir whisper.cpp sürümü indir "
+        "(whisper-server.exe) ve Ayarlar → Yerel whisper altında yolunu göster "
+        "ya da klasörünü PATH'e ekle.",
     "The local model “{model}” has not been downloaded. Settings → API and "
     "models → Download.":
         "“{model}” yerel modeli indirilmemiş. Ayarlar → API ve modeller → İndir.",
@@ -359,6 +405,38 @@ TR = {
         "KWin, kısayol ayarlarını yalnızca açılışta okur. 'Kur' dedikten sonra kısayol "
         "Sistem Ayarları → Kısayollar altında görünür ama oturumu yeniden açana kadar "
         "tetiklenmez. O zamana kadar yerleşik dinleyiciyi kullanabilirsin.",
+
+    # --- shortcut, Windows --------------------------------------------
+    "Register the shortcut with Windows": "Kısayolu Windows'a kaydet",
+    "This is what makes the shortcut work at all on Windows. Leave it on.":
+        "Windows'ta kısayolu çalıştıran şey budur. Açık bırak.",
+    "Windows keeps no list of shortcuts to install into, so Dikte asks for the "
+    "combination itself while it runs, and has it from the moment it starts — no "
+    "logout, and nothing else on the desktop sees the key while Dikte holds it. "
+    "A combination another application already holds cannot be had at all; if "
+    "that happens it is said here, and another one is the answer.":
+        "Windows'ta kurulacak bir kısayol listesi yok; Dikte kombinasyonu "
+        "çalışırken kendisi ister ve açıldığı andan itibaren elinde tutar — "
+        "oturum kapatmak gerekmez ve Dikte tuşu tuttuğu sürece masaüstünde başka "
+        "hiçbir şey onu görmez. Başka bir uygulamanın zaten tuttuğu bir "
+        "kombinasyon hiç alınamaz; öyleyse burada söylenir, cevabı başka bir "
+        "kombinasyon seçmektir.",
+    "Windows has no shortcut registry to install into; the listener above is "
+    "what binds the key.":
+        "Windows'ta kurulacak bir kısayol kaydı yok; tuşu bağlayan şey "
+        "yukarıdaki dinleyici.",
+    "{shortcut} is already taken by another application, so Dikte cannot use "
+    "it. Pick another combination under Settings → Shortcut.":
+        "{shortcut} kombinasyonunu başka bir uygulama tutuyor, Dikte "
+        "kullanamıyor. Ayarlar → Kısayol altından başka bir kombinasyon seç.",
+    "The listener registers {shortcut} with the system.":
+        "Dinleyici {shortcut} kombinasyonunu sisteme kaydediyor.",
+    "No combination set.": "Kombinasyon seçilmemiş.",
+    "No combination set. The tray menu starts a meeting too.":
+        "Kombinasyon seçilmemiş. Tepsi menüsünden de toplantı başlatılabilir.",
+    "No combination set. The tray menu asks it too.":
+        "Kombinasyon seçilmemiş. Tepsi menüsünden de sorulabilir.",
+
     "Shortcut conflict": "Kısayol çakışması",
     "{shortcut} is also used by:\n\n{list}\n\nInstall anyway?":
         "{shortcut} şu girdilerde de kullanılıyor:\n\n{list}\n\nYine de kurulsun mu?",
@@ -529,6 +607,56 @@ TR = {
         "Her komutla birlikte ajana söylenir, kendi yapılandırmanın zaten "
         "söylediklerinin üstüne eklenir.",
     "  ·  asked Claude: {question}": "  ·  Claude'a soruldu: {question}",
+
+    "Nothing on this machine can record what the speakers are playing. Turn on "
+    "“Stereo Mix” under Sound → Recording (right click → Show disabled "
+    "devices), or install a virtual cable such as VB-CABLE, then pick it above.":
+        "Bu makinede hoparlörden çıkan sesi kaydedebilecek bir aygıt yok. "
+        "Ses → Kayıt altında “Stereo Karışımı”nı aç (sağ tık → Devre dışı "
+        "aygıtları göster) ya da VB-CABLE gibi bir sanal kablo kur, sonra "
+        "yukarıdan seç.",
+
+    # --- the character -----------------------------------------------------
+    "Character": "Karakter",
+    "A sphere that stays on the edge of the screen: it lights up while you "
+    "talk, writes what it heard in a bubble beside it, and says what it did "
+    "with it. Drag it anywhere along the edge; click it to start or stop "
+    "talking.":
+        "Ekranın kenarında duran bir küre: sen konuşurken canlanır, duyduğunu "
+        "yanındaki balona yazar ve onunla ne yaptığını söyler. Kenar boyunca "
+        "istediğin yere sürükleyebilirsin; konuşmayı başlatmak ya da bitirmek "
+        "için üstüne tıkla.",
+    "Show the character": "Karakteri göster",
+    "Where it sits": "Nerede duruyor",
+    "Side": "Kenar",
+    "Right edge": "Sağ kenar",
+    "Left edge": "Sol kenar",
+    "Size": "Boy",
+    "Put it back in the middle": "Ortaya geri koy",
+    "Let it replace the corner indicator": "Köşe göstergesinin yerini alsın",
+    "On, the character is the only thing reporting. Off, the corner strip keeps "
+    "showing the waveform and the elapsed time as well.":
+        "Açıkken durumu yalnızca karakter bildirir. Kapalıyken köşedeki şerit de "
+        "dalga formunu ve geçen süreyi göstermeye devam eder.",
+    "Bubbles": "Balonlar",
+    "Shortest": "En kısa",
+    "Longest": "En uzun",
+    "How long a bubble stays is worked out from how much there is to read, "
+    "between these two.":
+        "Bir balonun ne kadar kalacağı, okunacak metnin uzunluğundan bu iki "
+        "değer arasında hesaplanır.",
+    "While you are still talking": "Sen konuşurken",
+    "Write the sentence as it is spoken": "Cümleyi söylenirken yaz",
+    "The audio so far is read back on the local whisper.cpp server about once a "
+    "second. What gets pasted is always the full pass made after you stop, "
+    "never the preview.":
+        "O ana kadarki ses, saniyede bir kez yerel whisper.cpp sunucusunda "
+        "yeniden okunur. Yapıştırılan metin her zaman sen bitirdikten sonra "
+        "yapılan tam çevirinin sonucudur, önizleme değil.",
+    "Only available with local whisper: on OpenAI or OpenRouter every second of "
+    "talking would be a paid request. Settings → API and models.":
+        "Yalnızca yerel whisper ile çalışır: OpenAI ya da OpenRouter'da her "
+        "konuşma saniyesi ücretli bir istek olurdu. Ayarlar → API ve modeller.",
 
     # --- meetings: tray and pipeline ---------------------------------------
     "Record a meeting": "Toplantı kaydet",

@@ -19,6 +19,7 @@ import pathlib
 import re
 import shutil
 import socket
+import sys
 import tempfile
 import threading
 import time
@@ -26,7 +27,12 @@ import unittest
 import unittest.mock
 
 import api
+import plat
 import whispercpp
+
+# What "you have not installed it yet" has to name to be worth reading: the
+# package on Linux, the file to go and fetch on Windows.
+HOW_TO_INSTALL = "whisper-server.exe" if plat.WINDOWS else "whisper-cpp"
 
 # A stand-in for whisper-server. It records its argv and every request body so
 # the tests can check what Dikte sent, and it binds its port late, which is
@@ -102,7 +108,22 @@ http.server.HTTPServer(("127.0.0.1", port), Handler).serve_forever()
 
 
 def write_script(directory, body):
-    path = pathlib.Path(directory) / "fake-whisper-server"
+    """The stand-in, as something the platform will actually start.
+
+    A shebang is what makes a text file runnable on Linux and nothing at all on
+    Windows, where the extension is the whole story: there the script is written
+    as .py and a one-line .cmd next to it is what Dikte is pointed at, which is
+    also the shape a real whisper.cpp release tends to arrive in.
+    """
+    folder = pathlib.Path(directory)
+    if plat.WINDOWS:
+        script = folder / "fake-whisper-server.py"
+        script.write_text(body, encoding="utf-8")
+        launcher = folder / "fake-whisper-server.cmd"
+        launcher.write_text(f'@echo off\r\n"{sys.executable}" "{script}" %*\r\n',
+                            encoding="utf-8")
+        return str(launcher)
+    path = folder / "fake-whisper-server"
     path.write_text(body)
     path.chmod(0o755)
     return str(path)
@@ -267,7 +288,7 @@ class ServerProcess(Base):
         whispercpp.configure(binary=os.path.join(self.tmp, "nope"))
         with self.assertRaises(whispercpp.LocalWhisperError) as caught:
             whispercpp.serve()
-        self.assertIn("whisper-cpp", str(caught.exception))
+        self.assertIn(HOW_TO_INSTALL, str(caught.exception))
 
     def test_missing_model_points_at_the_settings(self):
         whispercpp.configure(model="medium")
@@ -377,7 +398,7 @@ class ServerProcess(Base):
         self.assertFalse(whispercpp.ready("medium", self.binary))
         self.assertIn("medium", whispercpp.status("medium", self.binary))
         self.assertIn("small", whispercpp.status("small", self.binary))
-        self.assertIn("whisper-cpp",
+        self.assertIn(HOW_TO_INSTALL,
                       whispercpp.status("small", os.path.join(self.tmp, "nope")))
 
 
@@ -502,8 +523,50 @@ class StaleServers(Base):
 
     def test_the_pid_is_written_down_while_the_server_runs(self):
         whispercpp.serve()
-        pid = int(whispercpp._pid_file().read_text())
-        self.assertEqual(pid, whispercpp._SERVER._proc.pid)
+        self.assertEqual([pid for pid, _ in whispercpp._recall()],
+                         [whispercpp._SERVER._proc.pid])
+
+    def test_a_second_server_does_not_rub_the_first_one_out(self):
+        """The leak this note exists to prevent, and the one it used to cause.
+
+        Two servers running at once is not the normal case, but it is what a
+        second instance starting, or a script run beside the application, looks
+        like. With one line in the note the newcomer overwrote the incumbent,
+        and its own clean shutdown then deleted the note, leaving the first
+        server running with nothing left that knew it was there.
+        """
+        whispercpp._remember(4001)
+        whispercpp._remember(4002)
+        self.assertEqual([pid for pid, _ in whispercpp._recall()], [4001, 4002])
+        whispercpp._forget(4002)
+        self.assertEqual([pid for pid, _ in whispercpp._recall()], [4001])
+
+    def test_remembering_the_same_server_twice_lists_it_once(self):
+        whispercpp._remember(4001)
+        whispercpp._remember(4001)
+        self.assertEqual([pid for pid, _ in whispercpp._recall()], [4001])
+
+    def test_the_last_line_taken_away_takes_the_note_with_it(self):
+        whispercpp._remember(4001)
+        whispercpp._forget(4001)
+        self.assertFalse(whispercpp._pid_file().exists())
+
+    def test_a_note_scribbled_over_is_ignored_rather_than_obeyed(self):
+        whispercpp._pid_file().parent.mkdir(parents=True, exist_ok=True)
+        whispercpp._pid_file().write_text("not a pid\n\n17\tsomething\n")
+        self.assertEqual([pid for pid, _ in whispercpp._recall()], [17])
+
+    def test_the_sweep_clears_every_server_it_finds(self):
+        seen = []
+        with unittest.mock.patch.object(whispercpp, "_is_our_server",
+                                        lambda pid, identity="": True), \
+             unittest.mock.patch.object(whispercpp.plat, "terminate_pid",
+                                        lambda pid: seen.append(pid) or True):
+            whispercpp._remember(4001)
+            whispercpp._remember(4002)
+            self.assertTrue(whispercpp.sweep())
+        self.assertEqual(seen, [4001, 4002])
+        self.assertFalse(whispercpp._pid_file().exists())
 
     def test_a_clean_stop_takes_the_note_away(self):
         whispercpp.serve()

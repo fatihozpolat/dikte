@@ -1,23 +1,18 @@
-"""Settings storage in ~/.config/dikte/config.json"""
+"""Settings storage: ~/.config/dikte/config.json, or %APPDATA%\\dikte on Windows."""
 
 import hashlib
 import json
 import os
-import pathlib
 
 import api
 import i18n
+import plat
 import whispercpp
 from i18n import t
 
-
-def _xdg(var, default):
-    return pathlib.Path(os.environ.get(var) or os.path.expanduser(default))
-
-
-CONFIG_DIR = _xdg("XDG_CONFIG_HOME", "~/.config") / "dikte"
+CONFIG_DIR = plat.config_home() / "dikte"
 CONFIG_FILE = CONFIG_DIR / "config.json"
-DATA_DIR = _xdg("XDG_DATA_HOME", "~/.local/share") / "dikte"
+DATA_DIR = plat.data_home() / "dikte"
 HISTORY_FILE = DATA_DIR / "history.jsonl"
 RECORDINGS_DIR = DATA_DIR / "recordings"
 MEETINGS_DIR = DATA_DIR / "meetings"
@@ -409,8 +404,27 @@ DEFAULTS = {
     "min_voiced_seconds": 0.3,
     "filter_hallucinations": True,
     "shortcut": "Ctrl+Space",
-    "evdev_hotkey": False,
+    # On Linux this is the fallback for the gap before KWin picks the shortcut
+    # up, and off until it is wanted. On Windows it is not a fallback at all:
+    # registering the combination with the system is the only way to have one.
+    "evdev_hotkey": plat.WINDOWS,
     "overlay_corner": "bottom-left",
+
+    # --- the character ----------------------------------------------------
+    # A sphere that stays on the edge of the screen and says what it heard and
+    # what came of it. It does the corner indicator's job while it is on, which
+    # is why that one steps aside rather than the two of them both reporting.
+    "companion_enabled": True,
+    "companion_size": 128,
+    "companion_side": "right",      # right | left
+    "companion_offset": 0,          # remembered y after a drag; 0 -> centred
+    "companion_bubble_min": 3,      # seconds a bubble stays, at the short end
+    "companion_bubble_max": 30,     # and at the long end
+    # Read the sentence back while it is still being spoken. Local whisper only:
+    # on a hosted provider every second of talking would be a paid request.
+    "companion_live": True,
+    "companion_replaces_overlay": True,
+
     "keep_audio": False,
     "history_limit": 200,
     "file_timestamps": False,
@@ -498,6 +512,8 @@ class Config:
         tmp = CONFIG_FILE.with_suffix(".json.tmp")
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(self.data, fh, ensure_ascii=False, indent=2)
+        # The API keys are in here. On Windows this only clears the read-only
+        # bit and the profile directory is what keeps the file to one user.
         os.chmod(tmp, 0o600)
         tmp.replace(CONFIG_FILE)
         i18n.set_language(self.data["ui_language"])

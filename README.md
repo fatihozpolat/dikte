@@ -6,8 +6,8 @@ restarts, the missing punctuation), and the result lands in your clipboard and
 is pasted into whatever window you were typing in. OpenAI and OpenRouter are
 there as alternatives for the transcription too.
 
-Built for KDE Plasma 6 on Wayland. No dependencies beyond system packages:
-just the Python standard library and PyQt6.
+Runs on KDE Plasma 6 on Wayland, and on Windows 10 and 11. No dependencies
+beyond system packages: just the Python standard library and PyQt6.
 
 *[Türkçe README](README.tr.md)*
 
@@ -22,6 +22,8 @@ just the Python standard library and PyQt6.
 
 ## Install
 
+### Linux
+
 ```sh
 sudo pacman -S --needed pipewire-audio wl-clipboard ydotool ffmpeg python-pyqt6
 sudo pacman -S --needed whisper-cpp      # local speech to text
@@ -35,11 +37,34 @@ dikte                        # the settings window opens on first run
 `install.sh` adds the `dikte` command, a menu entry, an autostart entry and the
 KDE shortcut.
 
+### Windows
+
+```powershell
+winget install Python.Python.3.12
+winget install Gyan.FFmpeg              # this is what records the microphone
+pip install PyQt6
+
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+dikte                                   # the settings window opens on first run
+```
+
+For local speech to text, download a [whisper.cpp
+release](https://github.com/ggml-org/whisper.cpp/releases) and either put its
+folder on `PATH` or point Settings → Local whisper at `whisper-server.exe`. The
+CUDA build is the one to take on an NVIDIA card. Or skip it and transcribe
+through OpenAI or OpenRouter, which needs nothing installed at all.
+
+`install.ps1` adds the `dikte` command, a Start menu entry and an autostart
+entry, and checks each dependency on the way. The shortcut is registered by
+Dikte itself while it runs, so there is nothing to install for it and nothing to
+log out for; `install.ps1 "Ctrl+Alt+Space"` writes a different one into the
+settings.
+
 Speech to text runs locally by default, on whisper.cpp. Pick a model under
 Settings → API and models and press **Download**: `large-v3-turbo` (1.5 GB) is
 the default, and the list runs from `tiny` up to `large-v3`. Models land in
-`~/.local/share/dikte/models`. Nothing of the audio leaves the machine, and it
-costs nothing per dictation.
+`~/.local/share/dikte/models`, or `%LOCALAPPDATA%\dikte\models` on Windows.
+Nothing of the audio leaves the machine, and it costs nothing per dictation.
 
 Cleanup runs on **DeepSeek** (`deepseek-v4-flash`) or **OpenRouter**
 (`google/gemini-3.5-flash-lite`), whichever you pick; the same choice also writes
@@ -47,7 +72,8 @@ the meeting minutes. It can be switched off, in which case the raw transcript is
 pasted. Transcription can also be moved to **OpenAI** or **OpenRouter** under the
 same tab, on a machine that would rather not run a model itself. The keys fall
 back to `OPENAI_API_KEY`, `OPENROUTER_API_KEY` and `DEEPSEEK_API_KEY`, and are
-stored in `~/.config/dikte/config.json`, mode 600.
+stored in `~/.config/dikte/config.json` at mode 600, or in
+`%APPDATA%\dikte\config.json`, which is inside your own profile.
 
 One thing worth knowing about DeepSeek: it thinks unless it is told not to, and
 cleanup is not a job worth thinking about. Measured on the example below,
@@ -68,8 +94,19 @@ which are worth thinking about, to think.
 | Reload after an update | Tray menu → *Restart*, or `dikte restart` |
 | Quit | Tray menu → *Quit*, or `dikte quit` |
 
-An indicator in the screen corner shows a red dot, a live waveform and the
-elapsed time, then the stage it is on. It never takes focus. Pressing
+A sphere sits on the edge of the screen and is what you talk to: it lights up
+and swells with your voice while you speak, writes the sentence in a bubble
+beside it *as you are still saying it*, and then says what it did with it — the
+text it pasted, or the agent's answer. Bubbles stay between three and thirty
+seconds, worked out from how much there is to read. Drag it anywhere along the
+edge; click it instead of pressing the shortcut. It is under Settings → Character,
+along with its size, its side and how long the bubbles last, and turning it off
+puts everything back the way it was.
+
+Behind it, an indicator in the screen corner shows a red dot, a live waveform and the
+elapsed time, then the stage it is on — while the character is on that corner
+strip stays quiet, since two things reporting the same dictation from opposite
+corners is one too many. It never takes focus. Pressing
 `Ctrl+Space` again while Dikte is still working does nothing; nothing queues up.
 A dictation and a command to the agent do wait on each other for the microphone,
 which is one device, but for nothing else: each has its own indicator, and the
@@ -77,6 +114,19 @@ second one stacks above the first while both are up.
 
 ## What it does
 
+- **The sentence is read back while it is still being said.** Every second or
+  so the audio recorded *so far* goes to the same whisper.cpp server, and what
+  comes back replaces the previous guess in the bubble. There is no streaming
+  model and no second code path: it works because the machine is far faster than
+  the speaking — measured at forty to sixty times real time on an RTX 4060, so
+  a sentence in progress is re-read in a fraction of the time it took to say.
+  Re-reading the whole thing rather than a window is what lets it improve as
+  context arrives, and it is the reason the preview visibly corrects itself
+  ("paye tuta" becoming "PyQt" a second later), the way every live captioner
+  does. None of that reaches the clipboard: what gets pasted, cleaned up or
+  handed to the agent is always the full pass made after you stop. It only runs
+  against local whisper, because on a hosted provider every second of talking
+  would be a request that costs money and arrives late.
 - **Transcription runs on this machine.** whisper.cpp is kept alive as a server
   next to Dikte, on the `/v1/audio/transcriptions` path the hosted providers
   use, which is what makes it one more base URL rather than a second code path:
@@ -125,7 +175,8 @@ second one stacks above the first while both are up.
   interleaved into one timestamped transcript, and a second model, configured
   under Settings → Meeting along with its own instruction, turns that into
   minutes: decisions, action items, open questions. They land in
-  `~/.local/share/dikte/meetings` and in Settings → Minutes. A run that fails
+  `~/.local/share/dikte/meetings` (`%LOCALAPPDATA%\dikte\meetings`) and in
+  Settings → Minutes. A run that fails
   keeps its recording, and a retry resumes from the transcript it already paid
   for.
 - **Audio and video files** run through the same models under Settings → Audio
@@ -136,7 +187,7 @@ second one stacks above the first while both are up.
   right-click to delete.
 - **Turkish and English interface**, following the system locale by default.
 
-## The global shortcut needs one logout
+## On KDE, the global shortcut needs one logout
 
 KWin only reads `kglobalshortcutsrc` at startup, so the shortcut `install.sh`
 writes will not fire until you log out and back in. Until then, Settings →
@@ -145,11 +196,42 @@ itself. The difference: it does not swallow the key, so `Ctrl+Space` also reache
 the focused application (some editors will pop up autocomplete). The listener
 needs your user in the `input` group: `sudo usermod -aG input $USER`.
 
+None of which applies on Windows, where `RegisterHotKey` is the whole mechanism:
+Dikte asks the system for the combination while it runs and has it from the
+moment it starts, no logout, and nothing else on the desktop sees the key while
+Dikte holds it. The other side of that is that a combination another application
+already holds cannot be had at all — Settings → Shortcut says so when that
+happens, and another combination is the answer.
+
+## What is different on Windows
+
+- **The microphone comes through ffmpeg**, on its DirectShow input, because
+  there is no pw-record. Which means a recording starts about a third of a
+  second after the key press: that is what opening a DirectShow device costs,
+  and the indicator appearing before the first sample arrives is the visible
+  edge of it. Press, pause half a beat, then speak.
+- **A meeting needs a loopback device to exist.** Every PipeWire output has a
+  `.monitor` source to record from; Windows has one only if the sound card
+  offers "Stereo Mix" and somebody switched it on under Sound → Recording, or if
+  a virtual cable such as VB-CABLE is installed. Settings → Meeting says so when
+  there is none, rather than letting an hour be recorded half empty. Dictation
+  needs none of this.
+- **The clipboard and the key press are the system's own**, through user32
+  rather than through wl-clipboard and ydotool, so there is nothing to install
+  and no daemon to keep running. One limit comes with it: a window running as
+  administrator only accepts a synthesised key press from an application running
+  as administrator too, so auto-paste into one needs Dikte started the same way.
+- **The tray icon is drawn rather than themed**, since Windows ships no icon
+  theme: a blue microphone waiting, a red dot recording, an amber ring working.
+
 ## Layout
 
 ```
 dikte.py          entry point, tray icon, state machine, IPC
-audio.py          PCM capture: pw-record for dictation, ffmpeg for a meeting
+plat.py           what the two platforms do differently, in one place
+companion.py      the sphere on the edge of the screen, and its bubbles
+live.py           re-reading the audio so far, while it is still being spoken
+audio.py          PCM capture: pw-record or ffmpeg, and the device lists
 meeting.py        channel split, speaker labelling, cleanup, minutes
 assistant.py      running a dictation through Claude Code, Codex or OpenRouter
 api.py            transcription on any provider, OpenRouter cleanup (stdlib only)
@@ -158,14 +240,16 @@ worker.py         transcribe → clean up → clipboard → paste
 vad.py            deciding whether a recording holds speech at all
 filetranscribe.py file transcription: ffmpeg, chunking, timestamps
 overlay.py        the corner indicator
+icons.py          the tray icon, themed on Linux and drawn on Windows
 settings_ui.py    settings window
-hotkey.py         KDE shortcut installation and the evdev listener
-paste.py          wl-clipboard and ydotool wrappers
+hotkey.py         the KDE shortcut, the evdev listener, RegisterHotKey
+paste.py          the clipboard and the key press, on either platform
 i18n.py           the string table
 ```
 
-The indicator is drawn through XWayland, because a Wayland client cannot place a
-window in a screen corner; `dikte.py` sets `QT_QPA_PLATFORM=xcb` for that.
+On Wayland the indicator is drawn through XWayland, because a Wayland client
+cannot place a window in a screen corner; `dikte.py` sets `QT_QPA_PLATFORM=xcb`
+for that, and leaves it alone everywhere else.
 
 ## License
 

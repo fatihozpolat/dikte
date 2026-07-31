@@ -31,6 +31,7 @@ import time
 
 import api
 import config as cfg
+import plat
 from i18n import t
 
 SESSION_FILE = cfg.DATA_DIR / "assistant.json"
@@ -354,17 +355,51 @@ def _ask_openrouter(prompt, conf, on_stage):
 
 # --- running a CLI --------------------------------------------------------
 
+def resolve(name):
+    """The program a CLI's name stands for, as something that can be started.
+
+    On Linux the name is the program. On Windows it is usually a shim next to
+    it — claude.cmd, codex.cmd — and Windows will not start "claude" on its own:
+    the extension is part of the name there, and which extension it is is what
+    PATHEXT answers. shutil.which reads PATHEXT and prefers a real .exe to a
+    batch shim, which is also the order of preference here.
+    """
+    return shutil.which(name) or name
+
+
+def _batch_shim(program):
+    return (plat.WINDOWS
+            and os.path.splitext(program)[1].lower() in (".bat", ".cmd"))
+
+
+def _quoted_line(args):
+    """One command line with every argument in quotes.
+
+    A .bat or .cmd is not started directly: Windows hands the whole line to
+    cmd.exe, which reads &, |, < and > as punctuation of its own — and a
+    transcript is exactly the sort of text that has an ampersand in it. Inside
+    double quotes cmd reads none of them, so everything goes inside quotes,
+    and a quote in the text itself is doubled, which is how cmd spells one.
+    """
+    return " ".join('"' + str(arg).replace('"', '""') + '"' for arg in args)
+
+
 def _stream(cmd, conf, on_event, should_stop):
     """Run cmd, hand every JSON line it prints to on_event.
 
     Returns (exit code, stderr). Raises Cancelled when the stop was asked for,
     and AssistantError when the clock ran out.
     """
+    program = resolve(cmd[0])
+    line = [program, *cmd[1:]]
+    if _batch_shim(program):
+        line = _quoted_line(line)
     try:
         proc = subprocess.Popen(
-            cmd, cwd=working_dir(conf), stdin=subprocess.DEVNULL,
+            line, cwd=working_dir(conf), stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8", errors="replace", bufsize=1,
+            **plat.quiet(),
         )
     except OSError as exc:
         raise AssistantError(t("Could not run {binary}: {error}",

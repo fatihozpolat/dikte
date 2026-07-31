@@ -1,4 +1,15 @@
-"""Global shortcut: KDE custom-shortcut installation plus a built-in evdev listener."""
+"""The global shortcut: the one thing every desktop does its own way.
+
+KDE keeps its shortcuts in a file KWin reads at startup, so a shortcut installed
+now does not fire until the next login; the listener that reads /dev/input
+directly is what covers the gap, at the cost of not swallowing the key.
+
+Windows has nothing of that shape. RegisterHotKey is the whole mechanism: it is
+asked for a combination, it either gets it or somebody else already has it, and
+from then on the key press is delivered here and nowhere else. There is no file
+to install, nothing to log out for, and no second path — which is why the
+listener is on by default there and the KDE half of this file goes quiet.
+"""
 
 import glob
 import os
@@ -11,6 +22,7 @@ import threading
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
+import plat
 from i18n import t
 
 DESKTOP_ID = "dikte-toggle.desktop"
@@ -19,6 +31,8 @@ ASK_DESKTOP_ID = "dikte-ask.desktop"
 APPLICATIONS_DIR = pathlib.Path.home() / ".local/share/applications"
 DESKTOP_FILE = APPLICATIONS_DIR / DESKTOP_ID
 SHORTCUTS_FILE = pathlib.Path.home() / ".config/kglobalshortcutsrc"
+
+MODIFIERS = ("ctrl", "shift", "alt", "super")
 
 # --- evdev key codes (linux/input-event-codes.h) --------------------------
 
@@ -42,26 +56,58 @@ MODS = {
 }
 ALL_MOD_CODES = {code for pair in MODS.values() for code in pair}
 
+# --- Windows virtual-key codes (winuser.h) --------------------------------
+
+WIN_KEYS = {
+    "space": 0x20, "tab": 0x09, "enter": 0x0D, "return": 0x0D,
+    "esc": 0x1B, "escape": 0x1B, "backspace": 0x08,
+    "insert": 0x2D, "delete": 0x2E, "home": 0x24, "end": 0x23,
+    "pgup": 0x21, "pgdown": 0x22,
+    "up": 0x26, "down": 0x28, "left": 0x25, "right": 0x27,
+}
+WIN_KEYS.update({chr(code): code for code in range(0x30, 0x3A)})          # 0-9
+WIN_KEYS.update({chr(code + 32): code for code in range(0x41, 0x5B)})     # a-z
+WIN_KEYS.update({f"f{n}": 0x6F + n for n in range(1, 13)})                # F1-F12
+
+WIN_MODS = {"alt": 0x0001, "ctrl": 0x0002, "shift": 0x0004, "super": 0x0008}
+MOD_NOREPEAT = 0x4000
+WM_HOTKEY = 0x0312
+WM_QUIT = 0x0012
+
+
+def key_table():
+    """The keys this platform can bind, by name."""
+    return WIN_KEYS if plat.WINDOWS else KEYS
+
 
 def parse_shortcut(text):
-    """'Ctrl+Space' -> ({'ctrl'}, 57), or (None, None) when unparsable."""
+    """'Ctrl+Space' -> ({'ctrl'}, 'space'), or (None, None) when unparsable.
+
+    The key comes back by name rather than by code: the two platforms number
+    the same keys differently, and only the listener needs the number.
+    """
     parts = [p.strip().lower() for p in str(text).split("+") if p.strip()]
     if not parts:
         return None, None
     mods, key = set(), None
+    table = key_table()
     for part in parts:
-        if part in MODS:
-            mods.add("ctrl" if part == "control" else "super" if part == "meta" else part)
+        if part in ("ctrl", "control"):
+            mods.add("ctrl")
+        elif part in ("meta", "super"):
+            mods.add("super")
+        elif part in ("shift", "alt"):
+            mods.add(part)
+        elif key is None and part in table:
+            key = part
         else:
-            key = KEYS.get(part)
-            if key is None:
-                return None, None
+            return None, None
     if key is None:
         return None, None
     return mods, key
 
 
-# --- built-in listener ----------------------------------------------------
+# --- the built-in listener, Linux ------------------------------------------
 
 class EvdevHotkey(QObject):
     """Catches global shortcuts by reading /dev/input directly.
@@ -99,7 +145,7 @@ class EvdevHotkey(QObject):
                     t("Could not parse the shortcut: {shortcut}", shortcut=shortcut)
                 )
                 continue
-            parsed.setdefault(key, []).append((mods, name))
+            parsed.setdefault(KEYS[key], []).append((mods, name))
         if not parsed:
             return False
         devices = self._open_devices()
@@ -172,7 +218,171 @@ class EvdevHotkey(QObject):
         return True
 
 
+# --- the built-in listener, Windows ----------------------------------------
+
+class WinHotkey(QObject):
+    """Global shortcuts through RegisterHotKey.
+
+    Unlike the evdev listener this one does swallow the key: while Dikte holds
+    Ctrl+Space, nothing else on the desktop sees it. The other side of that is
+    that a combination somebody else already holds cannot be had at all, which
+    is a thing to be told about rather than to fail quietly over.
+
+    The registration and the loop that receives the presses have to live on the
+    same thread, and that thread has to sit in GetMessage rather than in Qt's
+    event loop, so it gets a thread of its own and hands each press over as a
+    signal.
+    """
+
+    triggered = pyqtSignal(str)
+    failed = pyqtSignal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._thread = None
+        self._thread_id = 0
+        self._ready = threading.Event()
+        self._problems = []
+
+    @property
+    def running(self):
+        return self._thread is not None and self._thread.is_alive()
+
+    def start(self, bindings):
+        self.stop()
+        parsed = []
+        for name, shortcut in bindings.items():
+            if not shortcut:
+                continue
+            mods, key = parse_shortcut(shortcut)
+            if key is None:
+                self.failed.emit(
+                    t("Could not parse the shortcut: {shortcut}", shortcut=shortcut)
+                )
+                continue
+            flags = MOD_NOREPEAT
+            for mod in mods:
+                flags |= WIN_MODS.get(mod, 0)
+            parsed.append((name, shortcut, flags, WIN_KEYS[key]))
+        if not parsed:
+            return False
+
+        self._problems = []
+        self._ready.clear()
+        self._thread = threading.Thread(target=self._loop, args=(parsed,), daemon=True)
+        self._thread.start()
+        # The registrations happen on that thread, and whether they worked is
+        # the answer this call owes its caller, so it waits for them.
+        self._ready.wait(3.0)
+        if self._problems:
+            self.failed.emit("\n".join(self._problems))
+        return self.running
+
+    def stop(self):
+        thread, self._thread = self._thread, None
+        if thread is None:
+            return
+        if self._thread_id:
+            import ctypes
+            ctypes.WinDLL("user32", use_last_error=True).PostThreadMessageW(
+                self._thread_id, WM_QUIT, 0, 0)
+        thread.join(timeout=2)
+        self._thread_id = 0
+
+    def _loop(self, parsed):
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        user32.RegisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int,
+                                          wintypes.UINT, wintypes.UINT]
+        user32.UnregisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.GetMessageW.argtypes = [ctypes.POINTER(wintypes.MSG), wintypes.HWND,
+                                       wintypes.UINT, wintypes.UINT]
+        user32.PostThreadMessageW.argtypes = [wintypes.DWORD, wintypes.UINT,
+                                              wintypes.WPARAM, wintypes.LPARAM]
+
+        self._thread_id = kernel32.GetCurrentThreadId()
+        names = {}
+        for index, (name, shortcut, flags, vk) in enumerate(parsed, start=1):
+            if user32.RegisterHotKey(None, index, flags, vk):
+                names[index] = name
+            else:
+                self._problems.append(t(
+                    "{shortcut} is already taken by another application, so Dikte "
+                    "cannot use it. Pick another combination under "
+                    "Settings → Shortcut.", shortcut=shortcut))
+        self._ready.set()
+        try:
+            if not names:
+                return
+            message = wintypes.MSG()
+            while True:
+                got = user32.GetMessageW(ctypes.byref(message), None, 0, 0)
+                if got in (0, -1):     # WM_QUIT, or the queue fell over
+                    break
+                if message.message == WM_HOTKEY:
+                    name = names.get(message.wParam)
+                    if name:
+                        self.triggered.emit(name)
+        finally:
+            for index in names:
+                user32.UnregisterHotKey(None, index)
+            # Thread ids come round again like pids do, and a WM_QUIT posted to
+            # a number this thread no longer owns would land on somebody else's.
+            self._thread_id = 0
+
+
+Hotkey = WinHotkey if plat.WINDOWS else EvdevHotkey
+
+
+def listener_swallows_key():
+    """Whether the listener takes the key press away from the focused window."""
+    return plat.WINDOWS
+
+
+def listener_label():
+    """What the checkbox that turns the listener on says."""
+    if plat.WINDOWS:
+        return t("Register the shortcut with Windows")
+    return t("Use the built-in listener (/dev/input), for when the KDE shortcut is "
+             "not active yet")
+
+
+def listener_hint():
+    """The tooltip on that checkbox."""
+    if plat.WINDOWS:
+        return t("This is what makes the shortcut work at all on Windows. "
+                 "Leave it on.")
+    return t("Works immediately, no session restart. The only difference: the key "
+             "combination also reaches the focused application.")
+
+
+def shortcut_note():
+    """The paragraph under the shortcut settings."""
+    if plat.WINDOWS:
+        return t(
+            "Windows keeps no list of shortcuts to install into, so Dikte asks "
+            "for the combination itself while it runs, and has it from the "
+            "moment it starts — no logout, and nothing else on the desktop sees "
+            "the key while Dikte holds it. A combination another application "
+            "already holds cannot be had at all; if that happens it is said "
+            "here, and another one is the answer."
+        )
+    return t(
+        "KWin only reads shortcut settings at startup. After 'Install' the "
+        "shortcut shows up under System Settings → Shortcuts, but it will not "
+        "fire until you log out and back in. Until then, use the built-in listener."
+    )
+
+
 # --- KDE custom shortcut --------------------------------------------------
+
+def native_shortcuts():
+    """Whether this desktop has a shortcut registry Dikte can write to."""
+    return not plat.WINDOWS
+
 
 def install_kde_shortcut(shortcut, exec_command, name="Dikte: start/stop recording",
                          desktop_id=DESKTOP_ID):
@@ -181,6 +391,9 @@ def install_kde_shortcut(shortcut, exec_command, name="Dikte: start/stop recordi
     KWin only reads that file at startup, so the entry goes live after the next
     login. Returns (True, message) or (False, error).
     """
+    if plat.WINDOWS:
+        return False, t("Windows has no shortcut registry to install into; the "
+                        "listener above is what binds the key.")
     desktop_file = APPLICATIONS_DIR / desktop_id
     try:
         desktop_file.parent.mkdir(parents=True, exist_ok=True)
@@ -216,6 +429,8 @@ def install_kde_shortcut(shortcut, exec_command, name="Dikte: start/stop recordi
 
 
 def remove_kde_shortcut(desktop_id=DESKTOP_ID):
+    if plat.WINDOWS:
+        return
     try:
         (APPLICATIONS_DIR / desktop_id).unlink(missing_ok=True)
     except OSError:
@@ -232,7 +447,7 @@ def remove_kde_shortcut(desktop_id=DESKTOP_ID):
 
 def kde_shortcut_status(desktop_id=DESKTOP_ID):
     """The registered shortcut, or None."""
-    if not (APPLICATIONS_DIR / desktop_id).exists():
+    if plat.WINDOWS or not (APPLICATIONS_DIR / desktop_id).exists():
         return None
     try:
         text = SHORTCUTS_FILE.read_text(encoding="utf-8")
@@ -249,6 +464,10 @@ def kde_shortcut_status(desktop_id=DESKTOP_ID):
 
 def conflicting_shortcuts(shortcut, desktop_id=DESKTOP_ID):
     """Names of other KDE entries bound to the same combination."""
+    if plat.WINDOWS:
+        # Windows keeps no list to read: a combination somebody else holds is
+        # only discovered by asking for it, and start() reports what came back.
+        return []
     try:
         text = SHORTCUTS_FILE.read_text(encoding="utf-8")
     except OSError:
