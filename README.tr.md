@@ -88,6 +88,8 @@ tutanağı ise düşünmeye bırakıyor.
 | Ne | Nasıl |
 | --- | --- |
 | Kaydı başlat / bitir | `Ctrl+Space`, ya da tepsi simgesine tıkla |
+| Söylediğimi yaz | kontrolün sol yarısı, ya da kısayolu |
+| Ajana yaptır | kontrolün sağ yarısı |
 | Zeno'yla konuş | kısayolu, tepsi menüsü → *Zeno'yla konuş*, ya da `dikte zeno` |
 | Konuşmasını kes | küreye tıkla |
 | Kaydı iptal et | Tepsi menüsü → *Kaydı iptal et*, ya da `dikte cancel` |
@@ -97,14 +99,19 @@ tutanağı ise düşünmeye bırakıyor.
 | Güncelleme sonrası yeniden yükle | Tepsi menüsü → *Yeniden başlat*, ya da `dikte restart` |
 | Çık | Tepsi menüsü → *Çık*, ya da `dikte quit` |
 
-Ekranın kenarında duran bir küre var; konuştuğun şey odur. Sen konuşurken
-canlanır ve sesinle birlikte büyür, cümleyi *sen daha söylerken* yanındaki
-balona yazar, sonra da onunla ne yaptığını söyler: yapıştırdığı metni ya da
-ajanın cevabını. Balonlar okunacak metnin uzunluğuna göre üç ile otuz saniye
-arasında kalır. Kenar boyunca istediğin yere sürükleyebilirsin; kısayola basmak
-yerine üstüne tıklayabilirsin. Boyu, hangi kenarda duracağı ve balonların ne
-kadar kalacağı Ayarlar → Karakter altında; kapattığında her şey eski haline
-döner.
+Ekranın kenarında iki yarımlı küçük bir kontrol var. Soldaki **yazar**:
+söylediğin şey temizlenip imlecin olduğu yere konur. Sağdaki **sorar**:
+söylediğin şey ajana gider ve cevap sesli döner. Modlu tek düğme değil, iki
+düğme; çünkü modda yanılmak, ajana gönderilmiş bir not ya da belgeye yazılmış
+bir soru demektir — iki lob birkaç piksele mal olur ve soruyu ortadan kaldırır.
+
+Duyduğu şey ekranın ortasında, sesinle dalgalanan yeşil bir şeridin üstünde
+görünür: cümle *sen daha söylerken*, sonra onunla ne yapıldığı. Şerit yazının
+arkasında ve soluk, çünkü tersi okunmayan yazılı bir dalga formu olurdu; bandın
+kendi zemini var, çünkü birinin duvar kâğıdı üstündeki beyaz yazı ölçüldü ve
+okunmuyordu. Okunacak metnin uzunluğuna göre üç ile otuz saniye arasında kalır.
+Kontrolü kenar boyunca sürükleyebilirsin; durdurmak için yarımlardan birine
+tekrar bas. Ayarlar → Karakter altında; kapattığında her şey eski haline döner.
 
 Arkasında, ekranın köşesindeki gösterge kırmızı kayıt noktasını, canlı ses
 dalgasını ve süreyi, ardından hangi aşamada olduğunu gösterir — karakter
@@ -289,7 +296,7 @@ uygulamanın zaten tuttuğu bir kombinasyon hiç alınamaz. Öyle bir durumda Ay
 ```
 dikte.py          giriş noktası, tepsi simgesi, durum makinesi, IPC
 plat.py           iki platformun farklı yaptığı şeyler, tek yerde
-companion.py      ekranın kenarındaki küre ve balonları
+companion.py      iki loblu kontrol ve ekranın ortasındaki bant
 conversation.py   dinlemesi istenmesinden cevabı vermesine kadarki döngü
 router.py         sözcükler mi isteniyordu, onlarla bir şey yapılması mı
 tts.py            cevabı sesli söyleme, Piper üzerinden

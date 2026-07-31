@@ -82,6 +82,8 @@ class Conversation(QObject):
         self.pipeline = pipeline
         self.voice = voice
         self.state = WAITING
+        # Which lobe was pressed for the job in hand.
+        self.mode = router.ASK
         # Set while an instruction that began "write this down" is waiting for
         # the words themselves, which are still to be spoken.
         self.pending_dictation = False
@@ -112,10 +114,17 @@ class Conversation(QObject):
 
     # ---- being called -----------------------------------------------------
 
-    def wake(self):
-        """Asked for. Start listening for the instruction."""
+    def wake(self, mode=router.ASK):
+        """Asked for. Start listening for the instruction.
+
+        `mode` is which of the two was pressed. It is the whole reason the
+        control has two lobes: told outright, nothing has to be guessed from
+        the words, and the one thing that cannot be recovered from — a note
+        sent to the agent, or a question typed into a document — cannot happen.
+        """
         if self.busy:
             return False
+        self.mode = mode
         if not self.recorder.active:
             self.recorder.start(self.conf["mic_target"], int(LIMIT_SECONDS))
             if not self.recorder.active:
@@ -212,6 +221,16 @@ class Conversation(QObject):
             self._paste(said, warning)
             return
 
+        if self.mode == router.DICTATE:
+            # The writing lobe was pressed. The words are the point; nothing is
+            # read into them.
+            self._paste(said, warning)
+            return
+
+        # The asking lobe. The words still get a say in one direction: somebody
+        # who presses ask and then says "yaz şunu" meant to write it down, and
+        # honouring that costs nothing. The reverse is not allowed — the
+        # writing lobe never quietly turns into an instruction to the agent.
         mode, payload = router.route(said, self.conf["dictation_openings"])
         if mode == router.DICTATE:
             if payload:

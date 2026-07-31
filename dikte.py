@@ -43,6 +43,7 @@ import i18n  # noqa: E402
 import icons  # noqa: E402
 import meeting  # noqa: E402
 import plat  # noqa: E402
+import router  # noqa: E402
 import tts  # noqa: E402
 import whispercpp  # noqa: E402
 import companion as companion_states  # noqa: E402
@@ -163,7 +164,7 @@ class Dikte:
         self.zeno.agent_answered.connect(self.zeno.answer)
         self.zeno.agent_failed.connect(self._on_zeno_failed)
         self.voice.started.connect(self._on_speaking)
-        self.companion.clicked.connect(self._companion_clicked)
+        self.companion.asked.connect(self._companion_asked)
         self.companion.moved.connect(self._companion_moved)
         # Started here as well as when the settings are saved: the listener is
         # a setting like any other, and one that only came on after a visit to
@@ -620,7 +621,7 @@ class Dikte:
 
     def _on_meeting_progress(self, _base, message):
         self.meeting_message = message
-        self.companion.stage(message)
+        self.companion.stage_note(message)
         if self.state == IDLE and self.meeting_state == M_WORKING:
             self.tray.setToolTip(message)
 
@@ -821,7 +822,7 @@ class Dikte:
         self.overlay.set_enabled(not quiet)
         self.ask_overlay.set_enabled(not quiet)
 
-    def talk_to_zeno(self):
+    def talk_to_zeno(self, mode=None):
         """Start a conversation: listen, work out what was meant, do it.
 
         Started by a shortcut, by the tray or from the command line rather
@@ -832,11 +833,11 @@ class Dikte:
         """
         if self.recording or self.state != IDLE or self.zeno.busy:
             return
-        if not self.zeno.wake():
+        if not self.zeno.wake(mode or router.ASK):
             return
         self.recorder_owner = ZENO
-        self.companion.show_recording()
-        self.companion.stage(t("Listening…"))
+        self.companion.show_recording(asking=mode != router.DICTATE)
+        self.companion.stage_note(t("Listening…"))
         self._set_state(RECORDING)
 
     def _on_speaking(self):
@@ -848,7 +849,7 @@ class Dikte:
         if state == conversation.LISTENING:
             self.companion.show_recording()
         elif state == conversation.WORKING:
-            self.companion.orb.set_state(companion_states.THINKING)
+            self.companion.pill.set_state(companion_states.THINKING)
         elif state == conversation.WAITING:
             if self.state != IDLE:
                 self._set_state(IDLE)
@@ -869,12 +870,12 @@ class Dikte:
         except paste.PasteError as exc:
             self._on_zeno_failed(str(exc))
             return
-        self.companion.stage(
+        self.companion.stage_note(
             t("Pasted") if self.conf["auto_paste"] else t("Copied"))
 
     def _ask_for_zeno(self, question):
         """Hand the question to the agent, on its own chain."""
-        self.companion.stage(t("Asking {name}…", name=i18n.name(
+        self.companion.stage_note(t("Asking {name}…", name=i18n.name(
             assistant.display_name(self.conf), "dative")))
         threading.Thread(target=self._run_agent, args=(question,),
                          daemon=True).start()
@@ -899,12 +900,13 @@ class Dikte:
             return
         self.zeno.agent_answered.emit(answer, warning)
 
-    def _companion_clicked(self):
-        """The sphere is a button too.
+    def _companion_asked(self, mode):
+        """A lobe was pressed.
 
-        While it is talking, or working on something it was asked out loud,
-        clicking it calls that off — an assistant reading out a long answer
-        with no way to stop it is the worst thing on the desktop.
+        While something is already going on it is the way out of it, whichever
+        lobe: an assistant reading a long answer with no way to stop it is the
+        worst thing on the desktop, and hunting for the right half of a button
+        to stop it with would be the second worst.
         """
         if self.zeno.busy:
             self.zeno.cancel()
@@ -913,10 +915,9 @@ class Dikte:
                 self._set_state(IDLE)
             self.companion.show_done(t("Stopped."), 1500)
             return
-        if self.ask_state == RECORDING:
-            self._toggle_ask()
-        else:
-            self._toggle()
+        if self.recording:
+            return
+        self.talk_to_zeno(mode)
 
     def _companion_moved(self, _x, y):
         self.conf["companion_offset"] = int(y)

@@ -618,15 +618,21 @@ TR = {
 
     # --- the character -----------------------------------------------------
     "Character": "Karakter",
-    "A sphere that stays on the edge of the screen: it lights up while you "
-    "talk, writes what it heard in a bubble beside it, and says what it did "
-    "with it. Drag it anywhere along the edge; click it to start or stop "
-    "talking.":
-        "Ekranın kenarında duran bir küre: sen konuşurken canlanır, duyduğunu "
-        "yanındaki balona yazar ve onunla ne yaptığını söyler. Kenar boyunca "
-        "istediğin yere sürükleyebilirsin; konuşmayı başlatmak ya da bitirmek "
-        "için üstüne tıkla.",
-    "Show the character": "Karakteri göster",
+    "A small control on the edge of the screen, with two halves. The left one "
+    "writes: what you say is tidied and put where the cursor is. The right one "
+    "asks: what you say goes to the agent and the answer comes back spoken. Two "
+    "buttons rather than one with a mode, because being wrong about a mode means "
+    "a note sent to an agent or a question typed into a document. What it hears "
+    "appears across the middle of the screen, over a ribbon that moves with your "
+    "voice. Drag it anywhere along the edge; press either half again to stop.":
+        "Ekranın kenarında, iki yarımlı küçük bir kontrol. Soldaki yazar: "
+        "söylediğin şey temizlenip imlecin olduğu yere konur. Sağdaki sorar: "
+        "söylediğin şey ajana gider ve cevap sesli döner. Modlu tek düğme değil, "
+        "iki düğme; çünkü modda yanılmak, ajana gönderilmiş bir not ya da "
+        "belgeye yazılmış bir soru demektir. Duyduğu şey ekranın ortasında, "
+        "sesinle dalgalanan bir şeridin üstünde görünür. Kenar boyunca "
+        "sürükleyebilirsin; durdurmak için yarımlardan birine tekrar bas.",
+    "Show the control": "Kontrolü göster",
     "Where it sits": "Nerede duruyor",
     "Side": "Kenar",
     "Right edge": "Sağ kenar",
@@ -638,13 +644,13 @@ TR = {
     "showing the waveform and the elapsed time as well.":
         "Açıkken durumu yalnızca karakter bildirir. Kapalıyken köşedeki şerit de "
         "dalga formunu ve geçen süreyi göstermeye devam eder.",
-    "Bubbles": "Balonlar",
+    "How long it stays up": "Ne kadar kalsın",
     "Shortest": "En kısa",
     "Longest": "En uzun",
-    "How long a bubble stays is worked out from how much there is to read, "
+    "How long the band stays up is worked out from how much there is to read, "
     "between these two.":
-        "Bir balonun ne kadar kalacağı, okunacak metnin uzunluğundan bu iki "
-        "değer arasında hesaplanır.",
+        "Bandın ne kadar kalacağı, okunacak metnin uzunluğundan bu iki değer "
+        "arasında hesaplanır.",
     "While you are still talking": "Sen konuşurken",
     "Write the sentence as it is spoken": "Cümleyi söylenirken yaz",
     "The audio so far is read back on the local whisper.cpp server about once a "

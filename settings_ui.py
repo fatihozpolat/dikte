@@ -266,15 +266,19 @@ class SettingsWindow(QDialog):
         layout = QVBoxLayout(page)
 
         intro = QLabel(t(
-            "A sphere that stays on the edge of the screen: it lights up while "
-            "you talk, writes what it heard in a bubble beside it, and says what "
-            "it did with it. Drag it anywhere along the edge; click it to start "
-            "or stop talking."
+            "A small control on the edge of the screen, with two halves. The "
+            "left one writes: what you say is tidied and put where the cursor "
+            "is. The right one asks: what you say goes to the agent and the "
+            "answer comes back spoken. Two buttons rather than one with a mode, "
+            "because being wrong about a mode means a note sent to an agent or a "
+            "question typed into a document. What it hears appears across the "
+            "middle of the screen, over a ribbon that moves with your voice. "
+            "Drag it anywhere along the edge; press either half again to stop."
         ))
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
-        self.companion_enabled = QCheckBox(t("Show the character"))
+        self.companion_enabled = QCheckBox(t("Show the control"))
         layout.addWidget(self.companion_enabled)
 
         box = QGroupBox(t("Where it sits"))
@@ -304,7 +308,7 @@ class SettingsWindow(QDialog):
         form.addRow("", self.companion_replaces)
         layout.addWidget(box)
 
-        bubbles = QGroupBox(t("Bubbles"))
+        bubbles = QGroupBox(t("How long it stays up"))
         bubble_form = QFormLayout(bubbles)
         self.companion_bubble_min = QSpinBox()
         self.companion_bubble_min.setRange(1, 60)
@@ -315,7 +319,7 @@ class SettingsWindow(QDialog):
         self.companion_bubble_max.setSuffix(t(" s"))
         bubble_form.addRow(t("Longest"), self.companion_bubble_max)
         span = QLabel(t(
-            "How long a bubble stays is worked out from how much there is to "
+            "How long the band stays up is worked out from how much there is to "
             "read, between these two."
         ))
         span.setWordWrap(True)

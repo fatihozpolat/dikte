@@ -87,6 +87,8 @@ which are worth thinking about, to think.
 | What | How |
 | --- | --- |
 | Start / stop recording | `Ctrl+Space`, or click the tray icon |
+| Write what I say | the left half of the control, or its shortcut |
+| Have the agent do it | the right half of the control |
 | Talk to Zeno | its shortcut, tray menu → *Talk to Zeno*, or `dikte zeno` |
 | Stop it talking | click the sphere |
 | Cancel a recording | Tray menu → *Cancel recording*, or `dikte cancel` |
@@ -96,14 +98,22 @@ which are worth thinking about, to think.
 | Reload after an update | Tray menu → *Restart*, or `dikte restart` |
 | Quit | Tray menu → *Quit*, or `dikte quit` |
 
-A sphere sits on the edge of the screen and is what you talk to: it lights up
-and swells with your voice while you speak, writes the sentence in a bubble
-beside it *as you are still saying it*, and then says what it did with it — the
-text it pasted, or the agent's answer. Bubbles stay between three and thirty
-seconds, worked out from how much there is to read. Drag it anywhere along the
-edge; click it instead of pressing the shortcut. It is under Settings → Character,
-along with its size, its side and how long the bubbles last, and turning it off
-puts everything back the way it was.
+A small control sits on the edge of the screen, with two halves. The left one
+**writes**: what you say is tidied and put where the cursor is. The right one
+**asks**: what you say goes to the agent and the answer comes back spoken. Two
+buttons rather than one with a mode, because being wrong about a mode means a
+note sent to an agent or a question typed into a document — two lobes cost a few
+pixels and remove the question.
+
+What it hears appears across the middle of the screen, over a green ribbon that
+moves with your voice: the sentence *as you are still saying it*, then what was
+done with it. The ribbon is behind the words and dim, because the other way
+round is a waveform with unreadable text on it, and the band has a plate of its
+own, because white paint on somebody's wallpaper was measured unreadable. It
+stays between three and thirty seconds, worked out from how much there is to
+read. Drag the control anywhere along the edge; press either half again to stop.
+It is under Settings → Character, and turning it off puts everything back the way
+it was.
 
 Behind it, an indicator in the screen corner shows a red dot, a live waveform and the
 elapsed time, then the stage it is on — while the character is on that corner
@@ -292,7 +302,7 @@ happens, and another combination is the answer.
 ```
 dikte.py          entry point, tray icon, state machine, IPC
 plat.py           what the two platforms do differently, in one place
-companion.py      the sphere on the edge of the screen, and its bubbles
+companion.py      the two-lobed control, and the band across the middle
 conversation.py   the loop from being asked to listen to having answered
 router.py         whether the words were wanted, or something done with them
 tts.py            saying the answer out loud, through Piper
