@@ -194,6 +194,7 @@ class Conf(dict):
 
 def a_conf(**changes):
     conf = Conf({"mic_target": "", "speech_margin_db": 10.0,
+                 "silence_db": -55.0, "min_voiced_seconds": 0.3,
                  "dictation_openings": ""})
     conf.update(changes)
     return conf
@@ -206,7 +207,8 @@ def quiet_rms(seconds):
 
 def loud_rms(seconds):
     blocks = max(1, int(seconds / (audio.CHUNK_FRAMES / audio.RATE)))
-    return [0.0004 if i % 4 else 0.2 for i in range(blocks)]
+    # Mostly loud, so it holds more than the minimum of actual speech.
+    return [0.0004 if i % 4 == 3 else 0.2 for i in range(blocks)]
 
 
 class TheLoop(unittest.TestCase):
@@ -250,6 +252,21 @@ class TheLoop(unittest.TestCase):
         self.assertEqual(self.zeno.state, conversation.WAITING)
         self.assertEqual(self.recorder.cancelled, 1)
         self.assertEqual(self.answers, [])
+
+    def test_the_microphones_own_hiss_is_not_somebody_talking(self):
+        """The bug this guards: relative loudness alone is met by the spread of
+        a quiet room's own noise, and it sat there recording nothing for ever."""
+        import random
+        random.seed(3)
+        blocks = int(6.0 / (audio.CHUNK_FRAMES / audio.RATE))
+        self.zeno.wake()
+        # Hiss: quiet, but with the ragged spread real microphone noise has.
+        self.recorder.rms = [abs(random.gauss(0, 0.00035)) + 1e-5
+                             for _ in range(blocks)]
+        self.zeno._began = time.monotonic() - conversation.PATIENCE_SECONDS - 0.1
+        self.zeno._look()
+        self.assertEqual(self.zeno.state, conversation.WAITING)
+        self.assertEqual(self.recorder.cancelled, 1)
 
     def test_a_pause_to_find_a_word_does_not_end_the_instruction(self):
         self.zeno.wake()

@@ -693,6 +693,26 @@ class Wiring(unittest.TestCase):
         self.dikte.companion.moved.emit(10, 640)
         self.assertEqual(self.dikte.conf["companion_offset"], 640)
 
+    def test_a_conversation_can_be_started_without_saying_the_name(self):
+        """The name has to be recorded in your own voice before it can be heard
+        at all, so there has to be a way in that does not need it."""
+        started = []
+        self.dikte.zeno.wake = lambda: started.append(True) or True
+        self.dikte.talk_to_zeno()
+        self.assertEqual(started, [True])
+
+    def test_clicking_the_sphere_calls_off_what_it_is_doing(self):
+        """An assistant reading out a long answer with no way to stop it is the
+        worst thing on the desktop."""
+        cancelled = []
+        self.dikte.zeno.cancel = lambda: cancelled.append(True)
+        type(self.dikte.zeno).busy = property(lambda _self: True)
+        self.addCleanup(lambda: setattr(
+            type(self.dikte.zeno), "busy",
+            property(lambda s: s.state != __import__("conversation").WAITING)))
+        self.dikte.companion.clicked.emit()
+        self.assertEqual(cancelled, [True])
+
     def test_a_shortcut_somebody_else_holds_does_not_take_startup_down(self):
         """Starting up reports failures through the tray, so the tray has to
         exist before anything that can fail is started. It did not, and a

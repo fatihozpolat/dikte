@@ -143,11 +143,23 @@ class Conversation(QObject):
         elapsed = now - self._began
 
         if rms:
+            # Two tests, not one. Relative alone — "louder than this recording's
+            # own floor" — is met by the microphone's own hiss in a quiet room,
+            # because the spread of that hiss is itself more than the margin;
+            # measured, that left it recording an empty room indefinitely. So a
+            # block also has to clear the absolute floor below which nothing is
+            # speech, which is the same pair of tests the finished recording is
+            # judged by.
+            stats = vad.analyse(rms, _chunk_seconds(),
+                                self.conf["speech_margin_db"])
+            gate = max(stats["noise_db"] + self.conf["speech_margin_db"],
+                       float(self.conf["silence_db"]))
             recent = rms[-max(1, int(0.25 / _chunk_seconds())):]
-            floor = vad.analyse(rms, _chunk_seconds())["noise_db"]
-            loud = any(vad.to_db(value) > floor + self.conf["speech_margin_db"]
-                       for value in recent)
-            if loud:
+            loud = any(vad.to_db(value) > gate for value in recent)
+            spoken_at_all = not vad.is_silent(
+                stats, self.conf["silence_db"], self.conf["speech_margin_db"],
+                self.conf["min_voiced_seconds"])
+            if loud and spoken_at_all:
                 self._heard_speech = True
                 self._spoke_at = now
 

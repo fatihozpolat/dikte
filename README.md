@@ -87,6 +87,8 @@ which are worth thinking about, to think.
 | What | How |
 | --- | --- |
 | Start / stop recording | `Ctrl+Space`, or click the tray icon |
+| Talk to Zeno | say its name, tray menu → *Talk to Zeno*, or `dikte zeno` |
+| Stop it talking | click the sphere |
 | Cancel a recording | Tray menu → *Cancel recording*, or `dikte cancel` |
 | Speak a command to an agent | Tray menu → *Ask Claude*, or `dikte ask` |
 | Start / end a meeting | Tray menu → *Record a meeting*, or `dikte meeting` |
@@ -131,6 +133,8 @@ The answer is spoken, and also appears in a bubble. Turn the voice off and only
 the bubble is left. When it is on, the agent is told it is being listened to
 rather than read, so it answers in a sentence instead of in headings and bullet
 points.
+
+You do not have to say the name at all: the tray menu and `dikte zeno` start the same conversation, which is also the only way in until the name has been recorded in your voice, and the answer in a room where saying a name out loud is not on. Clicking the sphere while it is talking or working calls it off.
 
 Waking it needs the name on its own, with a pause after it. "Zeno, put that in
 my calendar" said in one breath does not work, and that was measured rather than

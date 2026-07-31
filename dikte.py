@@ -8,6 +8,7 @@ Usage:
   dikte.py ask           start / stop recording a command for the agent
   dikte.py ask-cancel    call off the command the agent is working on
   dikte.py ask-reset     forget the conversation the agent has been following
+  dikte.py zeno          talk to Zeno without saying its name
   dikte.py meeting       start / end a meeting recording
   dikte.py meeting-cancel  discard the meeting being recorded
   dikte.py settings      open the settings window
@@ -203,6 +204,10 @@ class Dikte:
         self.ask_action.triggered.connect(self._toggle_ask)
         self.menu.addAction(self.ask_action)
 
+        self.zeno_action = QAction(t("Talk to Zeno"), self.menu)
+        self.zeno_action.triggered.connect(self.talk_to_zeno)
+        self.menu.addAction(self.zeno_action)
+
         self.reset_action = QAction(t("Start a new conversation"), self.menu)
         self.reset_action.triggered.connect(self.reset_conversation)
         self.menu.addAction(self.reset_action)
@@ -324,6 +329,10 @@ class Dikte:
             or (self.ask_state == IDLE and not self.recording)
         )
         self.reset_action.setEnabled(self.ask_state != BUSY)
+        # While it is in the middle of one, the entry becomes the way out.
+        self.zeno_action.setText(
+            t("Stop Zeno") if self.zeno.busy else t("Talk to Zeno"))
+        self.zeno_action.setEnabled(self.zeno.busy or not self.recording)
         self.cancel_action.setEnabled(self.recording)
         # A command to the agent is the one job long enough to be worth calling
         # off once it is already running.
@@ -845,6 +854,17 @@ class Dikte:
 
     def _on_woken(self):
         """The name was heard. Listen for what comes after it."""
+        self.talk_to_zeno()
+
+    def talk_to_zeno(self):
+        """Start a conversation without waiting to be called.
+
+        The same thing the name does, from the tray or the command line.
+        Worth having on its own: the name has to be recorded in your voice
+        before it can be heard at all, and until that is done this is the
+        only way in. It is also the answer in a room where saying a name out
+        loud is not on.
+        """
         if self.recording or self.state != IDLE or self.zeno.busy:
             return
         if not self.zeno.wake():
@@ -909,7 +929,19 @@ class Dikte:
         QTimer.singleShot(0, lambda: self.zeno.answer(answer, warning))
 
     def _companion_clicked(self):
-        """The sphere is a button too: click it to start or stop talking."""
+        """The sphere is a button too.
+
+        While it is talking, or working on something it was asked out loud,
+        clicking it calls that off — an assistant reading out a long answer
+        with no way to stop it is the worst thing on the desktop.
+        """
+        if self.zeno.busy:
+            self.zeno.cancel()
+            self.recorder_owner = None
+            if self.state != IDLE:
+                self._set_state(IDLE)
+            self.companion.show_done(t("Stopped."), 1500)
+            return
         if self.ask_state == RECORDING:
             self._toggle_ask()
         else:
@@ -1082,7 +1114,8 @@ def main():
 
     if command and command not in ("toggle", "cancel", "settings", "restart",
                                    "quit", "start", "stop", "ask", "ask-reset",
-                                   "ask-cancel", "meeting", "meeting-cancel"):
+                                   "ask-cancel", "zeno", "meeting",
+                                   "meeting-cancel"):
         print(__doc__)
         return 2
 
@@ -1141,6 +1174,7 @@ def main():
                 "ask": dikte.toggle_ask,
                 "ask-cancel": dikte.cancel_ask,
                 "ask-reset": dikte.reset_conversation,
+                "zeno": dikte.talk_to_zeno,
                 "meeting": dikte.toggle_meeting,
                 "meeting-cancel": dikte.cancel_meeting,
                 "settings": dikte.open_settings,
@@ -1165,6 +1199,8 @@ def main():
         QTimer.singleShot(0, dikte.toggle)
     elif command == "ask":
         QTimer.singleShot(0, dikte.toggle_ask)
+    elif command == "zeno":
+        QTimer.singleShot(0, dikte.talk_to_zeno)
     elif command == "meeting":
         QTimer.singleShot(0, dikte.toggle_meeting)
 

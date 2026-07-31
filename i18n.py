@@ -704,6 +704,9 @@ TR = {
     "Listening…": "Dinliyorum…",
     "Go ahead, I am listening.": "Buyur, dinliyorum.",
 
+    "Talk to Zeno": "Zeno'yla konuş",
+    "Stop Zeno": "Zeno'yu durdur",
+
     "Its voice": "Sesi",
     "Say the answer out loud": "Cevabı sesli söyle",
     "Off, the answer only appears in a bubble beside the character.":

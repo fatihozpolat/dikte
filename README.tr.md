@@ -88,6 +88,8 @@ tutanağı ise düşünmeye bırakıyor.
 | Ne | Nasıl |
 | --- | --- |
 | Kaydı başlat / bitir | `Ctrl+Space`, ya da tepsi simgesine tıkla |
+| Zeno'yla konuş | adını söyle, tepsi menüsü → *Zeno'yla konuş*, ya da `dikte zeno` |
+| Konuşmasını kes | küreye tıkla |
 | Kaydı iptal et | Tepsi menüsü → *Kaydı iptal et*, ya da `dikte cancel` |
 | Ajana sesle komut ver | Tepsi menüsü → *Claude'a sor*, ya da `dikte ask` |
 | Toplantıyı başlat / bitir | Tepsi menüsü → *Toplantı kaydet*, ya da `dikte meeting` |
@@ -131,6 +133,8 @@ Yalnızca başlangıca bakılır — "sonra sana yazarım" cümlesini panondan u
 Cevap hem sesli söylenir hem balonda görünür. Sesi kapatırsan yalnızca balon
 kalır. Açıkken ajana, okunmak yerine dinlendiği söylenir; o da başlık ve madde
 işaretleriyle değil, tek cümleyle cevap verir.
+
+Adı söylemek zorunda değilsin: tepsi menüsü ve `dikte zeno` aynı konuşmayı başlatır. Ad kendi sesinle kaydedilene kadar zaten tek yol budur; sesli bir ad söylemenin uygun olmadığı bir odada da cevap budur. Konuşurken ya da çalışırken küreye tıklamak onu keser.
 
 Uyandırmak için adın tek başına ve arkasından bir duraklamayla söylenmesi
 gerekiyor. "Zeno, şunu takvime ekle" tek nefeste çalışmaz — bu varsayım değil,
