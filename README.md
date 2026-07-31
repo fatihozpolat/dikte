@@ -1,6 +1,6 @@
 # Dikte
 
-Press `Ctrl+Space`, talk, press again. The recording is transcribed by whisper.cpp
+Say **Zeno**, or press `Ctrl+Space`, and talk. The recording is transcribed by whisper.cpp
 on your own machine, a model on OpenRouter cleans it up (dropping the *uh*s, the
 restarts, the missing punctuation), and the result lands in your clipboard and
 is pasted into whatever window you were typing in. OpenAI and OpenRouter are
@@ -111,6 +111,79 @@ corners is one too many. It never takes focus. Pressing
 A dictation and a command to the agent do wait on each other for the microphone,
 which is one device, but for nothing else: each has its own indicator, and the
 second one stacks above the first while both are up.
+
+## Talking to it
+
+Say its name — **Zeno** — wait for the sphere to light up, then say what you
+want. It works out which of two things you meant:
+
+| What you say | What happens |
+| --- | --- |
+| "Zeno" … "yaz, bugün üç karar aldık" | the sentence is tidied and pasted at the cursor |
+| "Zeno" … "takvime perşembe üçe toplantı ekle" | Claude does it, and says what it did |
+
+The opening decides. "Yaz", "not al", "metne dök", "write this down" and their
+neighbours mean you want the words themselves; everything else goes to the
+agent. Only the opening is looked at, which is what keeps "sonra sana yazarım"
+out of your clipboard. The list is in Settings → Shortcut and can be added to.
+
+The answer is spoken, and also appears in a bubble. Turn the voice off and only
+the bubble is left. When it is on, the agent is told it is being listened to
+rather than read, so it answers in a sentence instead of in headings and bullet
+points.
+
+Waking it needs the name on its own, with a pause after it. "Zeno, put that in
+my calendar" said in one breath does not work, and that was measured rather than
+assumed — see the note under **Hearing its name** below.
+
+### Hearing its name
+
+There is no model here and nothing running in the cloud. The name is recorded
+four times in your own voice under Settings → Shortcut → *Record the phrase*,
+its mel-cepstral shape is kept, and what the microphone hears is compared
+against those recordings by dynamic time warping — the method that came before
+the trained networks, and the one that is still right when there is exactly one
+speaker to recognise.
+
+Energy alone decides where an utterance starts and ends, so a quiet room costs
+one comparison per block and no arithmetic at all; only what falls between those
+two points is turned into features, at about nine milliseconds a second of
+speech. Holding the microphone open does not stop anything else using it — two
+captures of one device were checked to coexist — but Windows will show its
+microphone indicator for as long as Dikte runs, which is the honest sign that
+something is listening. It is off until you turn it on.
+
+What it costs you is that it knows *your* voice saying it, in the room you
+recorded it in, and not much else. On synthesised speech the name alone scored
+0.73 and 0.78 against a limit of 1.0, and the nearest of six decoys — including
+"Zeynep" and "Hey dostum" — scored 2.12. A real voice varies more than a
+synthesiser does.
+
+Saying the name and the instruction in one breath was built, fixed twice, and
+then removed: matching the name against the front of a longer utterance let
+speech that was *not* the name score better than the name followed by an
+instruction, so no threshold separated them and there was nothing to tune. The
+code that promised it is gone rather than left in looking like it works.
+
+### Its voice
+
+Piper, standing next to whisper.cpp and ffmpeg: a program with a voice in a
+file, nothing imported into Dikte, nothing downloaded at run time, nothing sent
+anywhere. Install it and put the voice next to the models:
+
+```powershell
+# piper.exe from https://github.com/rhasspy/piper/releases
+#   -> %LOCALAPPDATA%\Programs\piper\
+# tr_TR-fettah-medium.onnx and .onnx.json from
+#   https://huggingface.co/rhasspy/piper-voices/tree/main/tr/tr_TR
+#   -> %LOCALAPPDATA%\dikte\voices\
+```
+
+The voice is `tr_TR-fettah-medium`, and it was chosen by measurement rather than
+by name. Piper ships three Turkish voices, two of them called Fahrettin and
+Fettah, which are men's names. The fundamental frequency of a sentence from each
+says otherwise: dfki and fahrettin sit at 103 and 102 Hz, and fettah sits at 190
+with nothing below 166. Reading the names would have picked a man.
 
 ## What it does
 
@@ -230,6 +303,10 @@ happens, and another combination is the answer.
 dikte.py          entry point, tray icon, state machine, IPC
 plat.py           what the two platforms do differently, in one place
 companion.py      the sphere on the edge of the screen, and its bubbles
+wake.py           hearing its name, on mel-cepstra and time warping
+conversation.py   the loop from the name being said to the answer being given
+router.py         whether the words were wanted, or something done with them
+tts.py            saying the answer out loud, through Piper
 live.py           re-reading the audio so far, while it is still being spoken
 audio.py          PCM capture: pw-record or ffmpeg, and the device lists
 meeting.py        channel split, speaker labelling, cleanup, minutes

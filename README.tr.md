@@ -1,6 +1,6 @@
 # Dikte
 
-`Ctrl+Space`'e bas, konuş, tekrar bas. Ses kendi makinende whisper.cpp ile yazıya
+**Zeno** de, ya da `Ctrl+Space`'e bas, konuş. Ses kendi makinende whisper.cpp ile yazıya
 çevrilir, OpenRouter'daki bir model transkripti temizler (ıı'lar, tekrarlar,
 eksik noktalama), sonuç panoya kopyalanır ve o an yazdığın pencereye
 yapıştırılır. Yazıya çevirme için OpenAI ve OpenRouter da seçenek olarak duruyor.
@@ -112,6 +112,76 @@ iki şey bir fazladır. Odak almaz. Dikte çalışırken
 verilen komut yalnızca mikrofon için birbirini bekler, o da tek aygıt olduğu
 için; başka hiçbir şeyde beklemezler. Her birinin kendi göstergesi var, ikisi
 birden ekrandayken ikincisi birincinin üstüne yerleşir.
+
+## Onunla konuşmak
+
+Adını söyle — **Zeno** — küre canlanana kadar bekle, sonra ne istediğini söyle.
+İki şeyden hangisini kastettiğini kendisi çözer:
+
+| Ne dersin | Ne olur |
+| --- | --- |
+| "Zeno" … "yaz, bugün üç karar aldık" | cümle temizlenip imlecin olduğu yere yapıştırılır |
+| "Zeno" … "takvime perşembe üçe toplantı ekle" | Claude yapar ve ne yaptığını söyler |
+
+Kararı başlangıç verir. "Yaz", "not al", "metne dök", "write this down" ve
+benzerleri sözcüklerin kendisini istediğin anlamına gelir; gerisi ajana gider.
+Yalnızca başlangıca bakılır — "sonra sana yazarım" cümlesini panondan uzak tutan
+şey de bu. Liste Ayarlar → Kısayol altında, ekleme yapabilirsin.
+
+Cevap hem sesli söylenir hem balonda görünür. Sesi kapatırsan yalnızca balon
+kalır. Açıkken ajana, okunmak yerine dinlendiği söylenir; o da başlık ve madde
+işaretleriyle değil, tek cümleyle cevap verir.
+
+Uyandırmak için adın tek başına ve arkasından bir duraklamayla söylenmesi
+gerekiyor. "Zeno, şunu takvime ekle" tek nefeste çalışmaz — bu varsayım değil,
+ölçüm; aşağıdaki **Adını duyması** başlığına bak.
+
+### Adını duyması
+
+Burada ne bir model var ne de bulutta çalışan bir şey. Ad, Ayarlar → Kısayol →
+*İfadeyi kaydet* altında kendi sesinle dört kez kaydedilir, mel-kepstral biçimi
+saklanır ve mikrofonun duyduğu şey bu kayıtlarla dinamik zaman bükmesiyle
+karşılaştırılır — eğitilmiş ağlardan önce gelen ve tanınacak tek bir konuşmacı
+olduğunda hâlâ doğru olan yöntem.
+
+Sözcenin nerede başlayıp bittiğine yalnızca enerji karar verir; sessiz bir oda
+blok başına bir karşılaştırmaya mal olur, hiç aritmetik yapılmaz. Yalnızca o iki
+nokta arasında kalan kısım özniteliğe çevrilir, saniyesi yaklaşık dokuz
+milisaniye. Mikrofonu açık tutmak başka programların onu kullanmasını
+engellemez — aynı aygıtın iki yakalaması bir arada sınandı — ama Windows, Dikte
+çalıştığı sürece mikrofon simgesini gösterir; bir şeyin dinlediğinin dürüst
+işareti de budur. Sen açana kadar kapalıdır.
+
+Bunun bedeli şu: **senin** sesini, kaydettiğin odada, o ifadeyi söylerken bilir;
+fazlasını değil. Sentezlenmiş konuşmada ad tek başına 1,0 sınırına karşı 0,73 ve
+0,78 aldı; altı tuzağın en yakını — "Zeynep" ve "Hey dostum" dahil — 2,12.
+Gerçek bir ses sentezleyiciden daha çok değişir.
+
+Adı ve komutu tek nefeste söylemek yazıldı, iki kez düzeltildi ve sonra
+kaldırıldı: adı daha uzun bir sözcenin başında aramak, ad **olmayan** konuşmanın
+addan-sonra-komuttan daha iyi skor almasına yol açtı; hiçbir eşik bunları
+ayırmıyordu, yani ayarlanacak bir şey de yoktu. Sözü veren kod, çalışıyormuş gibi
+durmaktansa silindi.
+
+### Sesi
+
+Piper — whisper.cpp ve ffmpeg'in yanında duran, sesi bir dosyada olan bir
+program. Dikte'ye hiçbir şey aktarılmaz, çalışırken hiçbir şey indirilmez,
+hiçbir yere bir şey gönderilmez. Kurmak için:
+
+```powershell
+# piper.exe: https://github.com/rhasspy/piper/releases
+#   -> %LOCALAPPDATA%\Programs\piper\
+# tr_TR-fettah-medium.onnx ve .onnx.json:
+#   https://huggingface.co/rhasspy/piper-voices/tree/main/tr/tr_TR
+#   -> %LOCALAPPDATA%\dikte\voices\
+```
+
+Ses `tr_TR-fettah-medium` ve adına bakılarak değil, ölçülerek seçildi. Piper'ın
+üç Türkçe sesinden ikisinin adı Fahrettin ve Fettah, yani erkek adı. Her birinin
+söylediği bir cümlenin temel frekansı başka şey söylüyor: dfki ve fahrettin 103
+ve 102 Hz'de, fettah ise 166 Hz'in altına hiç inmeden 190 Hz'de. Adlara bakmak
+erkek bir ses seçtirirdi.
 
 ## Neler yapıyor
 
@@ -230,6 +300,10 @@ uygulamanın zaten tuttuğu bir kombinasyon hiç alınamaz. Öyle bir durumda Ay
 dikte.py          giriş noktası, tepsi simgesi, durum makinesi, IPC
 plat.py           iki platformun farklı yaptığı şeyler, tek yerde
 companion.py      ekranın kenarındaki küre ve balonları
+wake.py           adını duyma: mel-kepstrum ve zaman bükmesiyle
+conversation.py   ad söylenmesinden cevabın verilmesine kadarki döngü
+router.py         sözcükler mi isteniyordu, onlarla bir şey yapılması mı
+tts.py            cevabı sesli söyleme, Piper üzerinden
 live.py           o ana kadarki sesi, konuşma sürerken yeniden okuma
 audio.py          PCM kaydı: pw-record ya da ffmpeg, ve aygıt listeleri
 meeting.py        kanal ayırma, konuşmacı etiketi, temizleme, tutanak

@@ -638,8 +638,19 @@ class Config:
             prompt += SPEAKER_RULE_TR if turkish else SPEAKER_RULE_EN
         return prompt
 
-    def assistant_prompt(self):
-        return self["assistant_prompt"].strip() or default_assistant_prompt()
+    def assistant_prompt(self, spoken=False):
+        """What the agent is told, on top of whatever it is configured with.
+
+        `spoken` adds the rules that only apply when the answer is going to be
+        read out. Without them a model writes for a screen — headings, bullets,
+        a code block, a link — and every one of those is either noise when
+        spoken or a silence where something should have been.
+        """
+        prompt = self["assistant_prompt"].strip() or default_assistant_prompt()
+        if spoken:
+            prompt += (SPOKEN_RULE_TR if i18n.language() == "tr"
+                       else SPOKEN_RULE_EN)
+        return prompt
 
     # ---- meetings --------------------------------------------------------
 
@@ -693,6 +704,26 @@ def default_file_cleanup_prompt():
 
 def default_meeting_prompt():
     return MEETING_PROMPT_TR if i18n.language() == "tr" else MEETING_PROMPT_EN
+
+
+SPOKEN_RULE_EN = """
+
+YOU ARE BEING SPOKEN TO, AND YOUR ANSWER WILL BE READ ALOUD
+Answer in one or two sentences. Say what you did or what the answer is, and
+nothing else: no headings, no bullet points, no code, no links, no markdown of
+any kind. Write it the way you would say it to someone standing next to you.
+If something genuinely cannot be said in a sentence, say the short version and
+stop; the long one is on the screen anyway. Reply in the language you were
+spoken to in."""
+
+SPOKEN_RULE_TR = """
+
+SANA SESLE SORULUYOR VE CEVABIN SESLİ OKUNACAK
+Bir iki cümleyle cevap ver. Ne yaptığını ya da cevabın ne olduğunu söyle,
+fazlasını değil: başlık yok, madde işareti yok, kod yok, bağlantı yok, hiçbir
+markdown yok. Yanındaki birine söyler gibi yaz. Bir şey gerçekten tek cümleye
+sığmıyorsa kısa halini söyle ve dur; uzunu zaten ekranda. Sana hangi dilde
+söylendiyse o dilde cevap ver."""
 
 
 def default_assistant_prompt():

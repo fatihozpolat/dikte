@@ -45,7 +45,9 @@ import plat  # noqa: E402
 import tts  # noqa: E402
 import wake  # noqa: E402
 import whispercpp  # noqa: E402
+import companion as companion_states  # noqa: E402
 from companion import Companion  # noqa: E402
+import conversation  # noqa: E402
 from conversation import Conversation  # noqa: E402
 from i18n import t  # noqa: E402
 from live import LiveTranscriber  # noqa: E402
@@ -161,7 +163,7 @@ class Dikte:
         self.zeno.failed.connect(self._on_zeno_failed)
         self.zeno.finish_dictation.connect(self._paste_for_zeno)
         self.zeno.ask_agent.connect(self._ask_for_zeno)
-        self.voice.started.connect(lambda: self.wake.pause(True))
+        self.voice.started.connect(self._on_speaking)
         self.voice.finished.connect(self._refresh_wake)
         self.voice.failed.connect(lambda _m: self._refresh_wake())
         self.companion.clicked.connect(self._companion_clicked)
@@ -852,13 +854,17 @@ class Dikte:
         self.companion.stage(t("Listening…"))
         self._set_state(RECORDING)
 
+    def _on_speaking(self):
+        """Deaf while it talks, and visibly talking while it does."""
+        self.wake.pause(True)
+        self.companion.show_speaking()
+
     def _on_zeno_state(self, state):
         """Keep the sphere and the microphone in step with the conversation."""
-        import conversation
         if state == conversation.LISTENING:
             self.companion.show_recording()
         elif state == conversation.WORKING:
-            self.companion.orb.set_state("thinking")
+            self.companion.orb.set_state(companion_states.THINKING)
         elif state == conversation.WAITING:
             if self.state != IDLE:
                 self._set_state(IDLE)
@@ -893,7 +899,8 @@ class Dikte:
     def _run_agent(self, question):
         try:
             answer, warning = assistant.ask(
-                question, self.conf, on_stage=self.zeno.stage.emit)
+                question, self.conf, on_stage=self.zeno.stage.emit,
+                spoken=bool(self.conf["tts_enabled"]))
         except assistant.Cancelled:
             answer, warning = "", ""
         except assistant.AssistantError as exc:

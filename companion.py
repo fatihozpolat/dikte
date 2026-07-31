@@ -32,6 +32,7 @@ IDLE = "idle"
 LISTENING = "listening"
 THINKING = "thinking"
 ANSWER = "answer"
+SPEAKING = "speaking"
 WARNING = "warning"
 ERROR = "error"
 
@@ -41,6 +42,9 @@ PALETTE = {
     LISTENING: ("#8CEEFF", "#1FA8E0", "#06364F", "#4BE3C0"),
     THINKING:  ("#FFDF9E", "#E8A33D", "#4A2D08", "#FF8A5C"),
     ANSWER:    ("#A6F3D2", "#2FC08A", "#08402F", "#6FE0FF"),
+    # Talking, rather than having finished: the same family as an answer,
+    # turned toward the light, so the two read as one thing in two moments.
+    SPEAKING:  ("#CFFBE8", "#37D69C", "#0A4A38", "#8FE9FF"),
     WARNING:   ("#FFD79E", "#E8903D", "#4A2A08", "#FF7A5C"),
     ERROR:     ("#FFB0AA", "#E2453B", "#4A100D", "#FF7BA8"),
 }
@@ -48,7 +52,7 @@ PALETTE = {
 # How fast the inside turns over, per state. Thinking is the busy one; idle
 # barely moves, which is the point of idle.
 CHURN = {IDLE: 0.35, LISTENING: 1.5, THINKING: 2.2,
-         ANSWER: 0.9, WARNING: 0.9, ERROR: 0.9}
+         ANSWER: 0.9, SPEAKING: 2.0, WARNING: 0.9, ERROR: 0.9}
 
 # Repaint interval. A character that sits on the screen all day should not spend
 # the day repainting, so it slows right down when there is nothing happening.
@@ -117,7 +121,8 @@ class Orb(QWidget):
         if state != LISTENING:
             self._level = 0.0
             self._ripples.clear()
-        self._anim.setInterval(BUSY_MS if state in (LISTENING, THINKING) else CALM_MS)
+        self._anim.setInterval(
+            BUSY_MS if state in (LISTENING, THINKING, SPEAKING) else CALM_MS)
         self.update()
 
     def push_level(self, level):
@@ -182,7 +187,7 @@ class Orb(QWidget):
         self._paint_body(painter, centre, radius, highlight, body, depth)
         self._paint_inside(painter, centre, radius, highlight, accent)
         self._paint_sheen(painter, centre, radius)
-        if self.state == THINKING:
+        if self.state in (THINKING, SPEAKING):
             self._paint_rings(painter, centre, radius, highlight)
 
     def _swell(self):
@@ -192,6 +197,10 @@ class Orb(QWidget):
             return breath + 0.16 * self._level
         if self.state == THINKING:
             return breath + 0.02 * math.sin(self._phase * 4.0)
+        if self.state == SPEAKING:
+            # A steadier pulse than listening, because it is following its
+            # own cadence rather than somebody else's voice.
+            return breath + 0.055 * abs(math.sin(self._phase * 5.5))
         return breath
 
     def _paint_ripples(self, painter, centre, radius, highlight):
@@ -679,6 +688,11 @@ class Companion(QObject):
         self.orb.set_state(ERROR)
         self.say(message, "error", None if msec is None else msec / 1000.0)
         self._calm_later()
+
+    def show_speaking(self):
+        """It is saying the answer out loud rather than only showing it."""
+        self._wake()
+        self.orb.set_state(SPEAKING)
 
     def push_level(self, level):
         self.orb.push_level(level)
