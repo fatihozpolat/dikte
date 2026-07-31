@@ -1015,6 +1015,16 @@ class SettingsWindow(QDialog):
         self.tts_speed.setSuffix(" %")
         form.addRow(t("Speed"), self.tts_speed)
 
+        self.tts_pitch = QSpinBox()
+        self.tts_pitch.setRange(85, 125)
+        self.tts_pitch.setSingleStep(2)
+        self.tts_pitch.setSuffix(" %")
+        self.tts_pitch.setToolTip(t(
+            "Higher is a lighter, younger voice: the pitch and the shape of the "
+            "mouth move together, which is what a shorter vocal tract is. "
+            "Measured, 100% is 195 Hz and 110% is 213."))
+        form.addRow(t("Pitch"), self.tts_pitch)
+
         self.tts_try = QPushButton(t("Try the voice…"))
         self.tts_try.clicked.connect(self._open_voice_lab)
         form.addRow("", self.tts_try)
@@ -1064,9 +1074,12 @@ class SettingsWindow(QDialog):
     def _open_voice_lab(self):
         """A window to hear it in, and to see what it does before it speaks."""
         self.conf["tts_speed"] = self.tts_speed.value() / 100.0
+        self.conf["tts_pitch"] = self.tts_pitch.value() / 100.0
         lab = VoiceLab(self.conf, cfg.DATA_DIR, self)
         lab.exec()
+        # Whatever was settled on in there is what the boxes should now say.
         self.tts_speed.setValue(lab.speed.value())
+        self.tts_pitch.setValue(lab.pitch.value())
 
     def _wake_box(self):
         box = QGroupBox(t("Waking it by voice"))
@@ -1345,6 +1358,7 @@ class SettingsWindow(QDialog):
         self.wake_sensitivity.setValue(int(round(float(conf["wake_sensitivity"]) * 100)))
         self.tts_enabled.setChecked(conf["tts_enabled"])
         self.tts_speed.setValue(int(round(float(conf["tts_speed"] or 1.0) * 100)))
+        self.tts_pitch.setValue(int(round(float(conf["tts_pitch"] or 1.0) * 100)))
         self.dictation_openings.setPlainText(conf["dictation_openings"])
         self._refresh_wake_status()
         self._refresh_voice_status()
@@ -1479,6 +1493,7 @@ class SettingsWindow(QDialog):
         conf["wake_sensitivity"] = self.wake_sensitivity.value() / 100.0
         conf["tts_enabled"] = self.tts_enabled.isChecked()
         conf["tts_speed"] = self.tts_speed.value() / 100.0
+        conf["tts_pitch"] = self.tts_pitch.value() / 100.0
         conf["dictation_openings"] = self.dictation_openings.toPlainText().strip()
         conf["history_limit"] = self.history_limit.value()
         conf.save()
@@ -2503,6 +2518,14 @@ class VoiceLab(QDialog):
         self.speed.setSuffix(" %")
         self.speed.setValue(int(round(float(conf["tts_speed"] or 1.0) * 100)))
         row.addWidget(self.speed)
+        row.addSpacing(14)
+        row.addWidget(QLabel(t("Pitch")))
+        self.pitch = QSpinBox()
+        self.pitch.setRange(85, 125)
+        self.pitch.setSingleStep(2)
+        self.pitch.setSuffix(" %")
+        self.pitch.setValue(int(round(float(conf["tts_pitch"] or 1.0) * 100)))
+        row.addWidget(self.pitch)
         row.addStretch(1)
         self.say_button = QPushButton(t("Say it"))
         self.say_button.clicked.connect(self._say)
@@ -2578,6 +2601,7 @@ class VoiceLab(QDialog):
         self._spoken = 0
         self._made = []
         self._conf["tts_speed"] = self.speed.value() / 100.0
+        self._conf["tts_pitch"] = self.pitch.value() / 100.0
         if not self.voice.say(self.text.toPlainText()):
             self.log.addItem(t("Nothing to say."))
             return

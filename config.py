@@ -444,6 +444,12 @@ DEFAULTS = {
     "tts_binary": "",               # empty -> piper from PATH or the usual place
     "tts_voice": "",                # empty -> the default voice in the data dir
     "tts_speed": 1.0,
+    # How much lighter than recorded to make the voice. Raising the sample
+    # rate moves pitch and formants together, which is what a shorter vocal
+    # tract does, and the sentence is generated proportionally longer so the
+    # duration comes out unchanged. Measured: 1.0 gives 193 Hz, 1.10 gives
+    # 214 Hz, which is a lighter and younger voice rather than a faster one.
+    "tts_pitch": 1.10,
 
     # --- being spoken to --------------------------------------------------
     # Openings that mean the words themselves are wanted, on top of the ones

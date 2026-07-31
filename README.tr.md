@@ -190,6 +190,14 @@ cümle olarak söylenir, böylece uzun bir cevap gerisi hazırlanmadan başlar.
 Bu yazının yazıldığı kartta bu oran yaklaşık yedi kat gerçek zamanda oturuyor; bir
 cevabın anında mı yoksa parça parça mı geldiğine karar veren sayı da bu.
 
+Varsayılan olarak perdesi onda bir yükseltilmiş durumda; bu onu inceltiyor ve
+gençleştiriyor. Hızlandırarak değil: cümle orantılı olarak daha uzun üretiliyor ve
+örnekleme hızı ona göre yükseltiliyor, böylece perde ile formantlar birlikte
+hareket ediyor — kısa bir ses yolu tam olarak budur — ve süre değişmiyor. Hiçbir
+şey yeniden örneklenmiyor, hiçbir şey esnetilmiyor; duyulacak bir bozulma da yok,
+yalnızca başlıktaki sayı değişti. Ölçüldü: %100 ile 195 Hz, %110 ile 213 Hz.
+Kadran aynı pencerede, hızın yanında.
+
 Ses `tr_TR-fettah-medium` ve adına bakılarak değil, ölçülerek seçildi. Piper'ın
 üç Türkçe sesinden ikisinin adı Fahrettin ve Fettah, yani erkek adı. Her birinin
 söylediği bir cümlenin temel frekansı başka şey söylüyor: dfki ve fahrettin 103

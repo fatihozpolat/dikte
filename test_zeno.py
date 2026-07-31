@@ -136,6 +136,43 @@ class WhatIsWorthSaying(unittest.TestCase):
             self.assertNotIn("```", piece)
             self.assertNotIn("http", piece)
 
+    def test_pitch_is_kept_inside_what_the_trick_can_do(self):
+        """Raising the sample rate moves pitch and formants together, which is
+        a shorter vocal tract; pushed far enough it stops being a person."""
+        class Conf(dict):
+            pass
+        voice = tts.Voice(Conf({"tts_speed": 1.0, "tts_pitch": 9.0}), ".")
+        self.assertLessEqual(voice._pitch(), 1.25)
+        voice.conf["tts_pitch"] = 0.1
+        self.assertGreaterEqual(voice._pitch(), 0.85)
+        voice.conf["tts_pitch"] = None
+        self.assertEqual(voice._pitch(), 1.0)
+
+    def test_raising_the_pitch_leaves_the_length_alone(self):
+        """The sentence is generated proportionally longer so that playing it
+        higher lands back on the duration it was asked for."""
+        import audio as audio_module
+        path = audio_module.write_wav(bytes(2 * audio_module.RATE))
+        try:
+            tts._repitch(path, 1.10)
+            with __import__("contextlib").closing(
+                    __import__("wave").open(path)) as handle:
+                self.assertEqual(handle.getframerate(),
+                                 round(audio_module.RATE * 1.10))
+                self.assertEqual(handle.getnframes(), audio_module.RATE)
+        finally:
+            os.unlink(path)
+
+    def test_leaving_the_pitch_alone_does_not_touch_the_file(self):
+        import audio as audio_module
+        path = audio_module.write_wav(bytes(2 * audio_module.RATE))
+        try:
+            before = os.path.getmtime(path), tts._seconds(path)
+            tts._repitch(path, 1.0)
+            self.assertEqual(tts._seconds(path), before[1])
+        finally:
+            os.unlink(path)
+
     def test_speed_runs_the_opposite_way_to_duration(self):
         class Conf(dict):
             pass

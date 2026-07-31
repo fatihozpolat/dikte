@@ -228,8 +228,9 @@ class Voice(QObject):
             return None
         handle, path = tempfile.mkstemp(prefix="dikte-say-", suffix=".wav")
         os.close(handle)
+        pitch = self._pitch()
         command = [binary, "-m", voice, "-f", path,
-                   "--length_scale", f"{self._length_scale():.3f}"]
+                   "--length_scale", f"{self._length_scale() * pitch:.3f}"]
         try:
             with self._lock:
                 if run != self._run:
@@ -251,6 +252,7 @@ class Voice(QObject):
         finally:
             with self._lock:
                 self._proc = None
+        _repitch(path, pitch)
         if not os.path.exists(path) or os.path.getsize(path) < 64:
             try:
                 os.unlink(path)
@@ -264,9 +266,43 @@ class Voice(QObject):
         speed = float(self.conf["tts_speed"] or 1.0)
         return 1.0 / max(0.5, min(2.0, speed))
 
+    def _pitch(self):
+        """How much lighter than recorded to make it. 1.0 is as it was."""
+        return max(0.85, min(1.25, float(self.conf["tts_pitch"] or 1.0)))
+
 
 class _Cancelled(Exception):
     pass
+
+
+def _repitch(path, factor):
+    """Raise the pitch of a rendered sentence by rewriting its sample rate.
+
+    A voice is raised properly by shortening the vocal tract, which moves the
+    formants up with the pitch; playing a recording faster does exactly that.
+    The usual objection is that it also shortens the sentence — so the sentence
+    is generated proportionally longer to begin with, and the two cancel. The
+    result has the duration it was asked for, the pitch and formants of a
+    lighter voice, and no resampling in it at all: only the number in the
+    header changed, and nothing touched a sample.
+
+    Which is why this and not a filter. Stretching time back with a phase
+    vocoder would have cost a process per sentence and put an artefact into
+    every one of them, to arrive at the same place.
+    """
+    if abs(factor - 1.0) < 0.005:
+        return
+    try:
+        with contextlib.closing(wave.open(path, "rb")) as source:
+            params = source.getparams()
+            frames = source.readframes(params.nframes)
+        with contextlib.closing(wave.open(path, "wb")) as target:
+            target.setnchannels(params.nchannels)
+            target.setsampwidth(params.sampwidth)
+            target.setframerate(int(round(params.framerate * factor)))
+            target.writeframes(frames)
+    except (OSError, wave.Error):
+        pass       # the sentence is still perfectly sayable at its own pitch
 
 
 def _seconds(path):

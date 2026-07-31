@@ -730,6 +730,13 @@ TR = {
     "Off, the answer only appears in a bubble beside the character.":
         "Kapalıyken cevap yalnızca karakterin yanındaki balonda görünür.",
     "Speed": "Hız",
+    "Pitch": "Perde",
+    "Higher is a lighter, younger voice: the pitch and the shape of the "
+    "mouth move together, which is what a shorter vocal tract is. Measured, "
+    "100% is 195 Hz and 110% is 213.":
+        "Yükseltmek sesi inceltir ve gençleştirir: perde ile ağzın biçimi "
+        "birlikte hareket eder, kısa bir ses yolu tam olarak budur. "
+        "Ölçüldü: %100 ile 195 Hz, %110 ile 213 Hz.",
     "Close": "Kapat",
     "Try the voice…": "Sesi dene…",
     "Try the voice": "Sesi dene",

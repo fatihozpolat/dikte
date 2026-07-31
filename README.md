@@ -194,6 +194,14 @@ took to make against the time it lasts. On the card this was written for that
 settles at about seven times real time, which is the number that decides
 whether an answer sounds immediate or arrives in pieces.
 
+It is pitched up a tenth by default, which makes it lighter and younger. Not by
+playing it faster: the sentence is generated proportionally longer and its sample
+rate raised to match, so pitch and formants move together — which is what a
+shorter vocal tract is — and the duration comes out unchanged. Nothing is
+resampled and nothing is stretched, so there is no artefact to hear: only the
+number in the header changed. Measured, 100% is 195 Hz and 110% is 213. The dial
+is in the same window, next to the speed.
+
 The voice is `tr_TR-fettah-medium`, and it was chosen by measurement rather than
 by name. Piper ships three Turkish voices, two of them called Fahrettin and
 Fettah, which are men's names. The fundamental frequency of a sentence from each
