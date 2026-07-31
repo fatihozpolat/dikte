@@ -143,7 +143,9 @@ assumed — see the note under **Hearing its name** below.
 ### Hearing its name
 
 There is no model here and nothing running in the cloud. The name is recorded
-four times in your own voice under Settings → Shortcut → *Record the phrase*,
+four times in your own voice under Settings → Shortcut → *Record the phrase* —
+hold the button while you say it and let go, four times, with a green dot filling
+in for each one —
 its mel-cepstral shape is kept, and what the microphone hears is compared
 against those recordings by dynamic time warping — the method that came before
 the trained networks, and the one that is still right when there is exactly one

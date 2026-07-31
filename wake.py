@@ -42,11 +42,13 @@ import math
 import os
 import subprocess
 import threading
+import time
 
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
 import audio
 import plat
+import vad
 
 # --- how the sound is turned into a shape ---------------------------------
 
@@ -349,7 +351,12 @@ class Templates:
 
     @property
     def ready(self):
-        return len(self.rows) >= 2 and bool(self.thresholds)
+        if len(self.rows) < 2 or not self.thresholds:
+            return False
+        # Recordings that do not resemble each other are not a wake
+        # word, whatever they are. Better to say so than to hand back
+        # something that answers to every sound in the room.
+        return max(self.thresholds) <= ACCEPT_CEILING
 
     def mean_length(self):
         return sum(self.lengths) / len(self.lengths) if self.lengths else 0.0
@@ -428,6 +435,11 @@ class Templates:
 
 
 ACCEPT_MARGIN = 1.35    # how much worse than its twin a reading may be
+# Above this the recordings disagree too much to have been the same
+# phrase, and a threshold drawn from them would wake on anything. Seen
+# for real: four takes of a silent room calibrated to 24, where takes of
+# an actual word sit near 2.5.
+ACCEPT_CEILING = 9.0
 ACCEPT_FLOOR = 0.9      # and never tighter than this, however alike two takes were
 
 
@@ -638,34 +650,108 @@ def head_features(utterance):
 WANTED = 4          # how many times it has to be said
 
 
-class Enroller(QObject):
-    """Collects a few sayings of the phrase, through the same path that will
-    later listen for it.
+def _block_levels(samples):
+    return [levels(samples[at:at + BLOCK])
+            for at in range(0, max(1, len(samples) - 1), BLOCK)]
 
-    The same path on purpose: the templates have to come from the microphone
-    that will be used, cut at the boundaries the segmenter finds, and measured
-    by the code that will measure them. Enrolling from a file, or from audio
-    trimmed by hand, would produce templates that are subtly not what the
-    listener sees and a threshold that is subtly wrong.
+
+def trim(samples, margin_blocks=2):
+    """Cut the quiet off both ends of a take.
+
+    The button says which saying this is; the sound says where it starts and
+    stops. A finger is far less precise than a syllable, and to the matcher a
+    take that begins a tenth of a second earlier than the last one is a
+    different word: measured on identical audio cut at different moments, that
+    alone put fifteen between two takes, where two genuinely different sayings
+    of the same word sit at about two and a half.
+
+    So the marks choose the utterance and this finds its edges, which is the
+    same job the segmenter does when nobody is there to press anything.
+    """
+    rms = _block_levels(samples)
+    if not rms:
+        return samples
+    stats = vad.analyse(rms, BLOCK_SECONDS, SPEECH_MARGIN_DB)
+    gate = max(stats["noise_db"] + SPEECH_MARGIN_DB, -70.0)
+    loud = [index for index, value in enumerate(rms) if vad.to_db(value) > gate]
+    if not loud:
+        return samples
+    first = max(0, loud[0] - margin_blocks)
+    last = min(len(rms) - 1, loud[-1] + margin_blocks)
+    return samples[first * BLOCK:(last + 1) * BLOCK]
+
+
+def _holds_speech(samples):
+    """Whether a take has anything in it worth keeping.
+
+    The same pair of tests a finished dictation is judged by: loud enough in
+    absolute terms, and risen far enough above this recording's own floor for
+    long enough to be a word.
+    """
+    if not samples:
+        return False
+    rms = _block_levels(samples)
+    if not rms:
+        return False
+    stats = vad.analyse(rms, BLOCK_SECONDS, SPEECH_MARGIN_DB)
+    return not vad.is_silent(stats, margin_db=SPEECH_MARGIN_DB,
+                             min_voiced_seconds=0.15)
+
+
+class HoldRecorder(QObject):
+    """Records the name while a button is held down.
+
+    The device is opened once, when the window opens, and left running until it
+    closes. Opening a DirectShow capture costs about a third of a second, and a
+    third of a second after the button goes down is most of a short word — so a
+    take is a cut out of a stream that was already flowing, not a device being
+    started. Pressing and releasing only move two marks.
+
+    A little is kept from before the press and after the release for the same
+    reason people clip their own recordings: the hand is slower than the mouth
+    at the start and faster at the end.
     """
 
-    captured = pyqtSignal(int, int)     # how many so far, how many wanted
-    finished = pyqtSignal(object)       # Templates
+    captured = pyqtSignal(object)     # the samples of one take
+    rejected = pyqtSignal(str)        # a take too short to be a word
+    level = pyqtSignal(float)         # so the window can show the microphone is live
     failed = pyqtSignal(str)
 
-    def __init__(self, conf, phrase, wanted=WANTED, parent=None):
+    PREROLL_SECONDS = 0.18
+    TAIL_SECONDS = 0.18
+    # Below this the button was clicked, not held. Counted in the audio
+    # between the two marks rather than by the clock: it is the same thing
+    # a hold means, and it does not depend on the machine keeping up.
+    # Needed because what is kept from before the press is on its own
+    # longer than a take has to be, so a click otherwise yields a third of
+    # a second from the middle of a word — worse than nothing, because it
+    # looks usable.
+    HELD_SHORTEST = 0.3
+    SHORTEST = 0.28
+    # As much recent audio as is kept to cut from. Far more than a take needs,
+    # and small enough that a window left open all afternoon costs nothing.
+    KEEP_SECONDS = 30.0
+
+    def __init__(self, conf, parent=None):
         super().__init__(parent)
         self.conf = conf
-        self.phrase = phrase
-        self.wanted = wanted
         self._proc = None
         self._thread = None
         self._stop = threading.Event()
-        self._rows = []
+        self._lock = threading.Lock()
+        self._buffer = []          # recent samples
+        self._first = 0            # index in the stream of _buffer[0]
+        self._total = 0            # samples seen altogether
+        self._mark = None          # where the current take began
+        self._pressed_at = 0        # where in the stream the press landed
 
     @property
     def running(self):
         return self._thread is not None and self._thread.is_alive()
+
+    @property
+    def holding(self):
+        return self._mark is not None
 
     def start(self):
         if self.running:
@@ -682,9 +768,10 @@ class Enroller(QObject):
         except OSError as exc:
             self.failed.emit(str(exc))
             return False
-        self._rows = []
+        with self._lock:
+            self._buffer, self._first, self._total, self._mark = [], 0, 0, None
         self._stop.clear()
-        self._thread = threading.Thread(target=self._collect, daemon=True)
+        self._thread = threading.Thread(target=self._listen, daemon=True)
         self._thread.start()
         return True
 
@@ -696,31 +783,77 @@ class Enroller(QObject):
         self._thread = None
         self._proc = None
 
-    def _collect(self):
+    # ---- the two marks ----------------------------------------------------
+
+    def press(self):
+        """The button went down. Begin the take a moment before it did."""
+        with self._lock:
+            back = int(self.PREROLL_SECONDS * audio.RATE)
+            self._mark = max(self._first, self._total - back)
+            self._pressed_at = self._total
+
+    def release(self):
+        """The button came up. Take what is between the marks, plus a moment."""
+        if self._mark is None:
+            return
+        if self._total - self._pressed_at < self.HELD_SHORTEST * audio.RATE:
+            with self._lock:
+                self._mark = None
+            self.rejected.emit("short")
+            return
+
+        def cut():
+            with self._lock:
+                mark, self._mark = self._mark, None
+                if mark is None:
+                    return
+                begin = max(0, mark - self._first)
+                take = list(self._buffer[begin:])
+            seconds = len(take) / float(audio.RATE)
+            if seconds < self.SHORTEST:
+                self.rejected.emit("short")
+                return
+            take = trim(take)
+            if not _holds_speech(take):
+                # Held the button and said nothing, or the microphone is muted.
+                # Letting this through is worse than it sounds: four takes of a
+                # quiet room differ from each other at random, which calibrates
+                # a threshold wide enough to wake on anything at all.
+                self.rejected.emit("silent")
+                return
+            self.captured.emit(take)
+
+        # The tail is waited for rather than taken from what has already
+        # arrived: the last syllable is still on its way through the buffer.
+        QTimer.singleShot(int(self.TAIL_SECONDS * 1000), cut)
+
+    # ---- the stream -------------------------------------------------------
+
+    def _listen(self):
         import array
         stdout = self._proc.stdout
-        segmenter = Segmenter()
         want = BLOCK * audio.SAMPLE_WIDTH
+        keep = int(self.KEEP_SECONDS * audio.RATE)
         try:
-            while not self._stop.is_set() and len(self._rows) < self.wanted:
+            while not self._stop.is_set():
                 raw = stdout.read(want)
                 if not raw:
                     break
                 block = array.array("h")
                 block.frombytes(raw[:len(raw) - len(raw) % 2])
-                utterance = segmenter.feed(block, levels(block))
-                if utterance is None:
-                    continue
-                rows = features(utterance)
-                if not rows:
-                    continue
-                self._rows.append(rows)
-                self.captured.emit(len(self._rows), self.wanted)
+                with self._lock:
+                    self._buffer.extend(block)
+                    self._total += len(block)
+                    excess = len(self._buffer) - keep
+                    # Never trimmed past the take being recorded, or a long
+                    # press would lose its own beginning.
+                    if excess > 0:
+                        limit = ((self._mark - self._first) if self._mark is not None
+                                 else excess)
+                        excess = min(excess, max(0, limit))
+                        if excess > 0:
+                            del self._buffer[:excess]
+                            self._first += excess
+                self.level.emit(levels(block))
         except (OSError, ValueError):
             pass
-        if self._stop.is_set():
-            return
-        if len(self._rows) < 2:
-            self.failed.emit("")
-            return
-        self.finished.emit(calibrate(self._rows, self.phrase))

@@ -4,13 +4,15 @@ import os
 import shutil
 import threading
 
-from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices, QGuiApplication, QKeySequence, QShortcut
+from PyQt6.QtCore import QPointF, Qt, QTimer, QUrl, pyqtSignal
+from PyQt6.QtGui import (QColor, QDesktopServices, QGuiApplication,
+                         QKeySequence, QPainter, QPen, QShortcut)
 from PyQt6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMenu, QMessageBox, QPlainTextEdit,
-    QPushButton, QScrollArea, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
+    QProgressBar, QPushButton, QScrollArea, QSpinBox, QTabWidget,
+    QVBoxLayout, QWidget,
 )
 
 import api
@@ -2231,12 +2233,86 @@ class SettingsWindow(QDialog):
             self._clear_history()
 
 
-class WakeRecorder(QDialog):
-    """Say the phrase a few times, and keep the shape of it.
+class Dots(QWidget):
+    """One circle per take, filled in as they are collected.
 
-    It counts sayings rather than running a clock: the segmenter decides where
-    each one begins and ends, so the dialog waits for however long it takes and
-    the person is never cut off mid-phrase.
+    A count in words would say the same thing. Four circles say it without
+    being read, which matters while somebody is holding a button down and
+    watching their own hand rather than the text.
+    """
+
+    def __init__(self, total, parent=None):
+        super().__init__(parent)
+        self.total = total
+        self.done = 0
+        self.setMinimumHeight(30)
+
+    def set_done(self, done):
+        self.done = max(0, min(self.total, done))
+        self.update()
+
+    def paintEvent(self, _event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        radius = 9.0
+        gap = 30.0
+        left = (self.width() - (self.total - 1) * gap) / 2.0
+        for index in range(self.total):
+            centre = QPointF(left + index * gap, self.height() / 2.0)
+            if index < self.done:
+                painter.setBrush(QColor("#2FC08A"))
+                painter.setPen(QPen(QColor("#9BF0C8"), 1.5))
+            else:
+                painter.setBrush(QColor(255, 255, 255, 16))
+                painter.setPen(QPen(QColor(255, 255, 255, 60), 1.5))
+            painter.drawEllipse(centre, radius, radius)
+        painter.end()
+
+
+class HoldButton(QPushButton):
+    """A button that reports being held rather than being clicked."""
+
+    pressed_down = pyqtSignal()
+    released_up = pyqtSignal()
+
+    def mousePressEvent(self, event):
+        super().mousePressEvent(event)
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.pressed_down.emit()
+
+    def mouseReleaseEvent(self, event):
+        super().mouseReleaseEvent(event)
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.released_up.emit()
+
+    def keyPressEvent(self, event):
+        # Space and Enter hold it too, and Qt repeats them while held; only the
+        # first counts, or one long press reads as a hundred short ones.
+        held = (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter)
+        if event.key() in held and not event.isAutoRepeat():
+            self.pressed_down.emit()
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        held = (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter)
+        if event.key() in held and not event.isAutoRepeat():
+            self.released_up.emit()
+        super().keyReleaseEvent(event)
+
+
+class WakeRecorder(QDialog):
+    """Say the name a few times, holding a button for each one.
+
+    Held rather than detected. Working out where a word begins and ends from
+    loudness is the right answer later, when nobody is there to say; here
+    somebody is, and their finger beats any threshold. It also means a take is
+    never half a cough, and never two sayings run together because the pause
+    between them was short.
+
+    The microphone is opened once, when this window opens, and left running.
+    Opening a capture costs about a third of a second, which is most of a short
+    word, so pressing the button moves a mark in a stream that is already
+    flowing rather than starting a device.
     """
 
     def __init__(self, conf, phrase, parent=None):
@@ -2244,42 +2320,118 @@ class WakeRecorder(QDialog):
         self.setWindowTitle(t("Record the phrase"))
         self.templates = None
         self.phrase = phrase
+        self.takes = []
 
         layout = QVBoxLayout(self)
         self.instruction = QLabel(t(
-            "Say “{phrase}” {count} times, the way you would say it to wake it "
-            "up — same distance, same voice. Pause between them.",
+            "Hold the button and say “{phrase}”, then let go. {count} times, "
+            "the way you would say it to wake it up — same distance, same voice.",
             phrase=phrase, count=wake.WANTED,
         ))
         self.instruction.setWordWrap(True)
         layout.addWidget(self.instruction)
 
-        self.progress = QLabel(t("Listening… 0 of {count}", count=wake.WANTED))
-        layout.addWidget(self.progress)
+        self.dots = Dots(wake.WANTED)
+        layout.addWidget(self.dots)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        self.resize(430, 160)
+        self.button = HoldButton(t("Hold and say it"))
+        self.button.setMinimumHeight(54)
+        self.button.pressed_down.connect(self._down)
+        self.button.released_up.connect(self._up)
+        layout.addWidget(self.button)
 
-        self.enroller = wake.Enroller(conf, phrase, parent=self)
-        self.enroller.captured.connect(self._captured)
-        self.enroller.finished.connect(self._finished)
-        self.enroller.failed.connect(self._failed)
-        if not self.enroller.start():
+        self.meter = QProgressBar()
+        self.meter.setRange(0, 100)
+        self.meter.setTextVisible(False)
+        self.meter.setMaximumHeight(6)
+        layout.addWidget(self.meter)
+
+        self.status = QLabel("")
+        self.status.setWordWrap(True)
+        layout.addWidget(self.status)
+
+        row = QHBoxLayout()
+        self.again = QPushButton(t("Start over"))
+        self.again.clicked.connect(self._restart)
+        self.again.setEnabled(False)
+        row.addWidget(self.again)
+        row.addStretch(1)
+        cancel = QPushButton(t("Cancel"))
+        cancel.clicked.connect(self.reject)
+        row.addWidget(cancel)
+        layout.addLayout(row)
+        self.resize(470, 270)
+
+        self.recorder = wake.HoldRecorder(conf, parent=self)
+        self.recorder.captured.connect(self._took)
+        self.recorder.rejected.connect(self._too_short)
+        self.recorder.level.connect(self._on_level)
+        self.recorder.failed.connect(self._failed)
+        self._refresh()
+        if not self.recorder.start():
             QTimer.singleShot(0, self.reject)
 
-    def _captured(self, count, wanted):
-        self.progress.setText(t("Listening… {count} of {wanted}",
-                                count=count, wanted=wanted))
+    # ---- holding it -------------------------------------------------------
 
-    def _finished(self, templates):
-        self.templates = templates
-        self.enroller.stop()
+    def _down(self):
+        if len(self.takes) >= wake.WANTED:
+            return
+        self.recorder.press()
+        self.button.setText(t("Listening — let go when done"))
+        self.status.setText("")
+
+    def _up(self):
+        self.recorder.release()
+        self.button.setText(t("Hold and say it"))
+
+    def _took(self, samples):
+        self.takes.append(samples)
+        self.dots.set_done(len(self.takes))
+        self._refresh()
+        if len(self.takes) >= wake.WANTED:
+            QTimer.singleShot(200, self._finish)
+
+    def _too_short(self, why):
+        self.status.setText(
+            t("Nothing was said in that one — hold the button while you say it.")
+            if why == "silent"
+            else t("That one was too short — hold it while you say it."))
+
+    def _on_level(self, level):
+        self.meter.setValue(int(min(1.0, level * 3.0) * 100))
+
+    def _restart(self):
+        self.takes = []
+        self.dots.set_done(0)
+        self._refresh()
+
+    def _refresh(self):
+        left = wake.WANTED - len(self.takes)
+        self.again.setEnabled(bool(self.takes))
+        self.status.setText(
+            t("{count} more to go.", count=left) if left
+            else t("Working it out…"))
+
+    # ---- what comes of it -------------------------------------------------
+
+    def _finish(self):
+        self.recorder.stop()
+        rows = [wake.head_features(take) for take in self.takes]
+        rows = [row for row in rows if row]
+        if len(rows) < 2:
+            self._failed("")
+            return
+        self.templates = wake.calibrate(rows, self.phrase)
+        if not self.templates.ready:
+            # They did not sound like each other, so they are not one word.
+            self.templates = None
+            self._failed(t("Those four did not sound alike enough to go on. "
+                           "Say it the same way each time, and start over."))
+            return
         self.accept()
 
     def _failed(self, message):
-        self.enroller.stop()
+        self.recorder.stop()
         QMessageBox.warning(
             self, t("Record the phrase"),
             message or t("Not enough of the phrase was heard. Try again, a "
@@ -2287,7 +2439,7 @@ class WakeRecorder(QDialog):
         self.reject()
 
     def reject(self):
-        self.enroller.stop()
+        self.recorder.stop()
         super().reject()
 
 

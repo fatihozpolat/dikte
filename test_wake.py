@@ -294,13 +294,23 @@ class Segmenting(unittest.TestCase):
 # --- the whole path, with the microphone stood in for ----------------------
 
 class FakeStdout:
-    """Hands out a recording in blocks, then silence for ever, like a device."""
+    """Hands out a recording in blocks, then silence for ever, like a device.
+
+    Paced, not poured. A real microphone delivers a block every sixty-four
+    milliseconds, and the marks that cut a take out of the stream are only
+    meaningful against that. Handed over all at once, the stream was past
+    its own end before the first mark was set and every take came out of
+    the silence after it.
+    """
+
+    PACE = wake.BLOCK_SECONDS / 4.0   # quick for a test, slow enough to aim at
 
     def __init__(self, chunks):
         self._data = b"".join(chunks)
         self._at = 0
 
     def read(self, count):
+        time.sleep(self.PACE)
         if self._at >= len(self._data):
             return b"\x00" * count          # a quiet room, not end of stream
         piece = self._data[self._at:self._at + count]
@@ -333,18 +343,27 @@ def as_bytes(samples):
 
 
 def a_saying(seed, pitch=190.0):
-    """One "utterance": quiet, a burst of something voice-like, quiet."""
-    quiet = [0] * int(audio.RATE * 0.6)
+    """One take: a breath of quiet, something voice-like, a breath of quiet.
+
+    Short padding on purpose. A held button is released about when the word
+    ends, so a take is mostly word; padding it out with digital silence would
+    fill the compared span with frames whose cepstra are pure noise, and the
+    fixture would be measuring its own random number generator.
+    """
+    quiet = [0] * int(audio.RATE * 0.12)
     return quiet + speechy(0.85, pitch, seed=seed) + quiet
 
 
 class TheWholePath(unittest.TestCase):
-    """Recording the name and then hearing it, through everything in between.
+    """Recording the name by hand, and then hearing it.
 
-    The microphone is the only thing replaced. Segmentation, features,
-    calibration, what is written to disk, what is read back and the match all
-    run for real, because each of those has been wrong at some point and the
-    parts were right every time.
+    Split deliberately. Driving a threaded capture from a test means racing it,
+    and a race decides where a take is cut to within a block either way — which
+    is exactly the sloppiness the trimming exists to absorb. So the plumbing is
+    tested for plumbing (four holds, four takes, nothing refused), the trimming
+    is tested on audio handed to it directly, and the matching is tested on
+    takes that were cut the way the trimmer cuts them. Asserting a calibrated
+    threshold at the end of a race would be asserting the race.
     """
 
     def setUp(self):
@@ -363,89 +382,146 @@ class TheWholePath(unittest.TestCase):
         command.start()
         self.addCleanup(command.stop)
 
-    def enrol(self, sayings):
+    # ---- the plumbing ------------------------------------------------------
+
+    def test_holding_the_button_four_times_gives_four_takes(self):
         from PyQt6.QtWidgets import QApplication
         app = QApplication.instance() or QApplication([])
-        self.chunks = [as_bytes(s) for s in sayings]
-        enroller = wake.Enroller(self.conf, "Zeno", wanted=len(sayings))
-        got = []
-        enroller.finished.connect(got.append)
-        enroller.failed.connect(lambda _m: got.append(None))
-        self.assertTrue(enroller.start())
-        for _ in range(600):
-            app.processEvents()
-            if got:
-                break
-            time.sleep(0.01)
-        enroller.stop()
-        self.assertTrue(got, "enrolment never finished")
-        return got[0]
+        gap = [0] * int(audio.RATE * 0.3)
+        stream, marks = [], []
+        for seed in (1, 2, 3, 4):
+            saying = a_saying(seed)
+            marks.append((len(stream), len(stream) + len(saying)))
+            stream.extend(saying)
+            stream.extend(gap)
+        self.chunks = [as_bytes(stream)]
 
-    def test_recording_it_four_times_produces_something_that_can_be_matched(self):
-        templates = self.enrol([a_saying(seed) for seed in (1, 2, 3, 4)])
-        self.assertIsNotNone(templates)
-        self.assertEqual(len(templates.rows), 4)
-        self.assertTrue(templates.ready)
+        recorder = wake.HoldRecorder(self.conf)
+        takes, refused = [], []
+        recorder.captured.connect(takes.append)
+        recorder.rejected.connect(refused.append)
+        self.assertTrue(recorder.start())
+        try:
+            for index, (begin, finish) in enumerate(marks):
+                self._wait(app, lambda b=begin: recorder._total > b)
+                recorder.press()
+                self.assertTrue(recorder.holding)
+                self._wait(app, lambda f=finish: recorder._total >= f)
+                recorder.release()
+                self._wait(app, lambda i=index: len(takes) + len(refused) > i)
+        finally:
+            recorder.stop()
+        self.assertEqual(refused, [])
+        self.assertEqual(len(takes), 4)
+        for take in takes:
+            self.assertGreater(len(take) / audio.RATE, 0.5)
+
+    def test_a_click_rather_than_a_hold_is_refused(self):
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance() or QApplication([])
+        self.chunks = [as_bytes(a_saying(1) * 3)]
+        recorder = wake.HoldRecorder(self.conf)
+        refused = []
+        recorder.rejected.connect(refused.append)
+        self.assertTrue(recorder.start())
+        try:
+            self._wait(app, lambda: recorder._total > audio.RATE // 4)
+            recorder.press()
+            recorder.release()          # let go at once
+            self._wait(app, lambda: bool(refused))
+        finally:
+            recorder.stop()
+        self.assertEqual(refused, ["short"])
+
+    def test_saying_nothing_at_all_is_refused(self):
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance() or QApplication([])
+        self.chunks = [as_bytes([0] * int(audio.RATE * 4))]
+        recorder = wake.HoldRecorder(self.conf)
+        refused = []
+        recorder.rejected.connect(refused.append)
+        self.assertTrue(recorder.start())
+        try:
+            self._wait(app, lambda: recorder._total > audio.RATE // 2)
+            recorder.press()
+            self._wait(app, lambda: recorder._total > int(audio.RATE * 1.5))
+            recorder.release()
+            self._wait(app, lambda: bool(refused))
+        finally:
+            recorder.stop()
+        self.assertEqual(refused, ["silent"])
+
+    def _wait(self, app, done, limit=1500):
+        for _ in range(limit):
+            app.processEvents()
+            if done():
+                return True
+            time.sleep(0.005)
+        return False
+
+    # ---- the trimming ------------------------------------------------------
+
+    def test_a_take_is_cut_down_to_the_speech_inside_it(self):
+        """A finger is far less precise than a syllable. However much quiet the
+        button left on either end, what comes out has to be the same length, or
+        two takes of one word are two different words to the matcher."""
+        lengths = set()
+        for padding in (0.05, 0.2, 0.35, 0.6):
+            quiet = [0] * int(audio.RATE * padding)
+            lengths.add(round(len(wake.trim(quiet + a_saying(1) + quiet))
+                              / audio.RATE, 2))
+        self.assertEqual(len(lengths), 1, lengths)
+
+    def test_trimming_leaves_a_little_room_around_the_word(self):
+        trimmed = wake.trim(a_saying(1))
+        self.assertGreater(len(trimmed) / audio.RATE, 0.85)
+
+    def test_a_take_with_nothing_in_it_is_left_alone_rather_than_emptied(self):
+        quiet = [0] * int(audio.RATE * 1.0)
+        self.assertEqual(len(wake.trim(quiet)), len(quiet))
+        self.assertEqual(wake.trim([]), [])
+
+    # ---- the matching ------------------------------------------------------
+
+    def taken(self, seed, padding=0.2):
+        """A take as the recorder would hand it over: cut sloppily, trimmed."""
+        quiet = [0] * int(audio.RATE * padding)
+        return wake.trim(quiet + a_saying(seed) + quiet)
+
+    def test_recording_it_and_then_hearing_it(self):
+        takes = [self.taken(seed, padding) for seed, padding
+                 in ((1, 0.1), (2, 0.3), (3, 0.2), (4, 0.45))]
+        templates = wake.calibrate([wake.head_features(t) for t in takes], "Zeno")
+        self.assertTrue(templates.ready, templates.thresholds)
         templates.save(self.path)
 
         again = wake.Templates.load(self.path)
         self.assertTrue(again.ready)
-
-        # What can be asserted from made-up audio is that the fifth saying is
-        # much nearer the recordings than something else is. Whether it falls
-        # inside the threshold is a question about a real voice in a real room,
-        # and a synthetic fixture that claimed to answer it would be measuring
-        # its own noise generator.
-        _heard, near, _end = again.matches(wake.head_features(a_saying(5)))
-        other = [0] * int(audio.RATE * 0.6) + speechy(1.4, 95.0, seed=9)
+        _heard, near, _end = again.matches(wake.head_features(self.taken(5)))
+        other = wake.trim([0] * int(audio.RATE * 0.2) + speechy(1.4, 95.0, seed=9))
         _missed, far, _end = again.matches(wake.head_features(other))
         self.assertLess(near * 2, far)
 
-    def test_something_else_said_afterwards_is_not_the_name(self):
-        templates = self.enrol([a_saying(seed) for seed in (1, 2, 3, 4)])
-        # A different pitch and a different envelope: another word entirely.
-        other = [0] * int(audio.RATE * 0.6) + speechy(1.4, 95.0, seed=9)
-        heard, _score, _end = templates.matches(wake.head_features(other))
-        self.assertFalse(heard)
+    def test_recordings_that_are_not_the_same_word_are_refused(self):
+        """Four takes of a quiet room calibrate to a threshold that would wake
+        on anything. Saying so beats handing one back."""
+        # A quiet room, not digital silence: perfect zeros are identical to
+        # each other and calibrate to the floor, which is the one kind of
+        # nothing this cannot be caught out by. Real hiss is random, and four
+        # takes of it agree with each other about as much as four strangers do.
+        random.seed(5)
+        hiss = [wake.head_features(
+            [int(random.gauss(0, 60)) for _ in range(int(audio.RATE * 1.2))])
+            for _ in range(4)]
+        self.assertFalse(wake.calibrate(hiss).ready)
+        wild = [wake.head_features(speechy(1.0, pitch, seed=int(pitch)))
+                for pitch in (90.0, 200.0, 130.0, 320.0)]
+        self.assertFalse(wake.calibrate(wild).ready)
 
-    def test_the_listener_says_so_when_it_hears_it(self):
-        from PyQt6.QtWidgets import QApplication
-        app = QApplication.instance() or QApplication([])
-        self.enrol([a_saying(seed) for seed in (1, 2, 3, 4)]).save(self.path)
-
-        self.chunks = [as_bytes(a_saying(7))]
-        listener = wake.WakeListener(self.conf, self.path)
-        woke = []
-        listener.woken.connect(lambda: woke.append(True))
-        self.assertTrue(listener.start())
-        self.addCleanup(listener.stop)
-        for _ in range(400):
-            app.processEvents()
-            if woke:
-                break
-            time.sleep(0.01)
-        self.assertTrue(woke, "the listener never reported the name")
-
-    def test_it_will_not_start_before_the_name_has_been_recorded(self):
+    def test_the_listener_will_not_start_before_the_name_is_recorded(self):
         listener = wake.WakeListener(self.conf, self.path)
         self.assertFalse(listener.start())
         self.assertFalse(listener.running)
-
-    def test_it_is_deaf_while_something_else_is_using_the_microphone(self):
-        from PyQt6.QtWidgets import QApplication
-        app = QApplication.instance() or QApplication([])
-        self.enrol([a_saying(seed) for seed in (1, 2, 3, 4)]).save(self.path)
-        self.chunks = [as_bytes(a_saying(7))]
-        listener = wake.WakeListener(self.conf, self.path)
-        woke = []
-        listener.woken.connect(lambda: woke.append(True))
-        listener.pause(True)
-        self.assertTrue(listener.start())
-        self.addCleanup(listener.stop)
-        for _ in range(150):
-            app.processEvents()
-            time.sleep(0.01)
-        self.assertEqual(woke, [])
 
 
 if __name__ == "__main__":

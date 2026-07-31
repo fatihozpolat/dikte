@@ -669,6 +669,24 @@ TR = {
         "işareti de budur.",
     "Phrase": "İfade",
     "Record the phrase": "İfadeyi kaydet",
+    "Hold the button and say “{phrase}”, then let go. {count} times, "
+    "the way you would say it to wake it up — same distance, same voice.":
+        "Düğmeyi basılı tut ve “{phrase}” de, sonra bırak. {count} kez, onu "
+        "uyandırmak için söyleyeceğin gibi — aynı mesafe, aynı ses.",
+    "Hold and say it": "Basılı tut ve söyle",
+    "Nothing was said in that one — hold the button while you say it.":
+        "Bunda hiçbir şey söylenmedi — söylerken düğmeyi basılı tut.",
+    "Those four did not sound alike enough to go on. Say it the same way "
+    "each time, and start over.":
+        "Bu dördü devam edecek kadar birbirine benzemiyor. Her seferinde "
+        "aynı şekilde söyle ve baştan al.",
+    "Listening — let go when done": "Dinliyorum — bitince bırak",
+    "That one was too short — hold it while you say it.":
+        "Bu çok kısaydı — söylerken basılı tut.",
+    "{count} more to go.": "{count} tane kaldı.",
+    "Working it out…": "Hesaplanıyor…",
+    "Start over": "Baştan al",
+    "Cancel": "Vazgeç",
     "Record the phrase…": "İfadeyi kaydet…",
     "Forget it": "Unut",
     "Sensitivity": "Duyarlılık",

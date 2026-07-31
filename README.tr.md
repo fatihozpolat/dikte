@@ -143,7 +143,8 @@ gerekiyor. "Zeno, şunu takvime ekle" tek nefeste çalışmaz — bu varsayım d
 ### Adını duyması
 
 Burada ne bir model var ne de bulutta çalışan bir şey. Ad, Ayarlar → Kısayol →
-*İfadeyi kaydet* altında kendi sesinle dört kez kaydedilir, mel-kepstral biçimi
+*İfadeyi kaydet* altında kendi sesinle dört kez kaydedilir — söylerken düğmeyi
+basılı tut ve bırak, dört kez; her biri için bir nokta yeşile döner — mel-kepstral biçimi
 saklanır ve mikrofonun duyduğu şey bu kayıtlarla dinamik zaman bükmesiyle
 karşılaştırılır — eğitilmiş ağlardan önce gelen ve tanınacak tek bir konuşmacı
 olduğunda hâlâ doğru olan yöntem.
