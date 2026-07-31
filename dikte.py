@@ -41,6 +41,7 @@ import i18n  # noqa: E402
 import icons  # noqa: E402
 import meeting  # noqa: E402
 import plat  # noqa: E402
+import wake  # noqa: E402
 import whispercpp  # noqa: E402
 from companion import Companion  # noqa: E402
 from i18n import t  # noqa: E402
@@ -99,11 +100,19 @@ class Dikte:
         self.companion = Companion(self.conf)
         self.recorder = audio.Recorder()
         self.live = LiveTranscriber(self.conf, self.recorder)
+        self.wake = wake.WakeListener(self.conf, str(cfg.WAKE_FILE))
         self.pipeline = Pipeline(self.conf)
         self.ask_pipeline = Pipeline(self.conf)
         self.meeting_recorder = audio.MeetingRecorder()
         self.meetings = MeetingPipeline(self.conf)
         self.evdev = hotkey.Hotkey()
+        # Built before anything can go wrong, rather than at the end. Reporting
+        # a failure means refreshing the tray, and several of the things set up
+        # below can fail while starting — a shortcut another application already
+        # holds, most easily — which used to reach a menu that did not exist yet
+        # and take the whole startup down with an AttributeError.
+        self.tray = QSystemTrayIcon()
+        self._build_tray()
         # Before anything is started: a server from a Dikte that was killed
         # outright is still holding the model in memory.
         whispercpp.sweep()
@@ -134,6 +143,8 @@ class Dikte:
         self.evdev.triggered.connect(self._on_evdev)
         self.evdev.failed.connect(self._on_error)
         self.live.partial.connect(self.companion.live)
+        self.wake.woken.connect(self._on_woken)
+        self.wake.failed.connect(self._on_error)
         self.companion.clicked.connect(self._companion_clicked)
         self.companion.moved.connect(self._companion_moved)
         # Started here as well as when the settings are saved: the listener is
@@ -153,7 +164,6 @@ class Dikte:
         self.meeting_ticker.setInterval(500)
         self.meeting_ticker.timeout.connect(self._meeting_tick)
 
-        self.tray = QSystemTrayIcon()
         self._apply_settings()
         self.tray.show()
 
@@ -244,17 +254,29 @@ class Dikte:
 
     def _set_state(self, state):
         self.state = state
+        self._refresh_wake()
         self._refresh_tray()
 
     def _set_ask_state(self, state):
         self.ask_state = state
+        self._refresh_wake()
         self._refresh_tray()
 
     def _set_meeting_state(self, state):
         self.meeting_state = state
         if state != M_WORKING:
             self.meeting_message = ""
+        self._refresh_wake()
         self._refresh_tray()
+
+    def _refresh_wake(self):
+        """Deaf whenever the microphone is already being used on purpose.
+
+        What is dictated is not an attempt to wake anything, and an hour of a
+        meeting is an hour of sentences to compare against the phrase for no
+        reason. It keeps capturing either way; only the comparing stops.
+        """
+        self.wake.pause(self.recording or self.meeting_state == M_RECORDING)
 
     def _refresh_tray(self):
         labels = {
@@ -763,6 +785,7 @@ class Dikte:
         self.overlay.corner = self.conf["overlay_corner"]
         self.ask_overlay.corner = self.conf["overlay_corner"]
         self._apply_companion()
+        self._apply_wake()
         self._apply_local_whisper()
         self._build_tray()
         self._refresh_tray()
@@ -781,6 +804,27 @@ class Dikte:
         quiet = on and bool(self.conf["companion_replaces_overlay"])
         self.overlay.set_enabled(not quiet)
         self.ask_overlay.set_enabled(not quiet)
+
+    def _apply_wake(self):
+        """Hold the microphone open only while the setting says to.
+
+        Stopped and started rather than left running and ignored: an always-open
+        microphone is a thing to be doing on purpose, and switching the setting
+        off should close the device rather than merely stop acting on it.
+        """
+        self.wake.stop()
+        if not self.conf["wake_enabled"]:
+            return
+        if not self.wake.start():
+            # Nothing recorded yet, so there is nothing to listen for. Said in
+            # the settings window rather than shouted here on every start.
+            self.conf["wake_enabled"] = False
+
+    def _on_woken(self):
+        """The phrase was heard. Start a dictation, if nothing else is going on."""
+        if self.recording or self.state != IDLE:
+            return
+        self.start()
 
     def _companion_clicked(self):
         """The sphere is a button too: click it to start or stop talking."""
@@ -828,6 +872,7 @@ class Dikte:
         self._quitting = True
         self.evdev.stop()
         self.live.stop()
+        self.wake.stop()
         self.companion.set_visible(False)
         if self.recording:
             self.recorder.cancel()

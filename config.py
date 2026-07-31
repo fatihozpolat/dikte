@@ -15,6 +15,9 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 DATA_DIR = plat.data_home() / "dikte"
 HISTORY_FILE = DATA_DIR / "history.jsonl"
 RECORDINGS_DIR = DATA_DIR / "recordings"
+# The recordings of the wake phrase, as cepstra rather than as audio: what is
+# kept is the shape the matcher compares against, not anything playable.
+WAKE_FILE = DATA_DIR / "wake.json"
 MEETINGS_DIR = DATA_DIR / "meetings"
 MEETINGS_FILE = DATA_DIR / "meetings.jsonl"
 
@@ -424,6 +427,15 @@ DEFAULTS = {
     # on a hosted provider every second of talking would be a paid request.
     "companion_live": True,
     "companion_replaces_overlay": True,
+
+    # --- waking it by voice -----------------------------------------------
+    # Off until it is asked for: a program that holds the microphone open all
+    # day should be doing it because somebody said so, not by default.
+    "wake_enabled": False,
+    "wake_phrase": "Hey Zeno",
+    # Above 1 accepts a looser match, below 1 a stricter one. The threshold
+    # itself comes out of the recordings; this is the dial over the top of it.
+    "wake_sensitivity": 1.0,
 
     "keep_audio": False,
     "history_limit": 200,

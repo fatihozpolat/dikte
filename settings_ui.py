@@ -4,7 +4,7 @@ import os
 import shutil
 import threading
 
-from PyQt6.QtCore import Qt, QUrl, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QGuiApplication, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
@@ -21,6 +21,7 @@ import filetranscribe
 import hotkey
 import meeting
 import plat
+import wake
 import whispercpp
 from filetranscribe import FileTranscriber
 from i18n import t
@@ -989,8 +990,94 @@ class SettingsWindow(QDialog):
         note = QLabel(hotkey.shortcut_note())
         note.setWordWrap(True)
         layout.addWidget(note)
+
+        layout.addWidget(self._wake_box())
         layout.addStretch(1)
         return page
+
+    def _wake_box(self):
+        box = QGroupBox(t("Waking it by voice"))
+        form = QFormLayout(box)
+
+        self.wake_enabled = QCheckBox(t("Start a dictation when I say the phrase"))
+        self.wake_enabled.setToolTip(t(
+            "Holds the microphone open for as long as Dikte runs. Windows shows "
+            "its microphone indicator the whole time, which is the honest sign "
+            "that something is listening."
+        ))
+        form.addRow("", self.wake_enabled)
+
+        self.wake_phrase = QLineEdit()
+        self.wake_phrase.setPlaceholderText("Hey Zeno")
+        form.addRow(t("Phrase"), self.wake_phrase)
+
+        self.wake_record = QPushButton(t("Record the phrase…"))
+        self.wake_record.clicked.connect(self._record_wake)
+        self.wake_forget = QPushButton(t("Forget it"))
+        self.wake_forget.clicked.connect(self._forget_wake)
+        form.addRow("", self._row(self.wake_record, self.wake_forget))
+
+        self.wake_sensitivity = QSpinBox()
+        self.wake_sensitivity.setRange(50, 200)
+        self.wake_sensitivity.setSuffix(" %")
+        self.wake_sensitivity.setSingleStep(5)
+        self.wake_sensitivity.setToolTip(t(
+            "Higher accepts a looser match, so it is caught more often and set "
+            "off more often. Lower is the other way round."
+        ))
+        form.addRow(t("Sensitivity"), self.wake_sensitivity)
+
+        self.wake_status = QLabel("")
+        self.wake_status.setWordWrap(True)
+        form.addRow(self.wake_status)
+
+        explain = QLabel(t(
+            "It works by shape, not by recognition: the phrase is recorded a few "
+            "times in your voice, and what the microphone hears is compared "
+            "against those recordings. So it knows your voice saying it, and not "
+            "much else — which is what lets it run without a trained model, a "
+            "network or an account. Nothing playable is stored, and nothing "
+            "leaves the machine."
+        ))
+        explain.setWordWrap(True)
+        form.addRow(explain)
+        return box
+
+    def _refresh_wake_status(self):
+        templates = wake.Templates.load(str(cfg.WAKE_FILE))
+        ready = templates.ready
+        self.wake_enabled.setEnabled(ready)
+        self.wake_forget.setEnabled(ready)
+        if not ready:
+            self.wake_enabled.setChecked(False)
+            self.wake_status.setText(
+                t("Not recorded yet, so there is nothing to listen for."))
+            return
+        self.wake_status.setText(t(
+            "Recorded {count} times as “{phrase}”.",
+            count=len(templates.rows), phrase=templates.phrase or self.wake_phrase.text()))
+
+    def _record_wake(self):
+        phrase = self.wake_phrase.text().strip() or "Hey Zeno"
+        dialog = WakeRecorder(self.conf, phrase, self)
+        if dialog.exec() and dialog.templates is not None:
+            try:
+                dialog.templates.save(str(cfg.WAKE_FILE))
+            except OSError as exc:
+                QMessageBox.warning(self, t("Waking it by voice"),
+                                    t("Could not save: {error}", error=exc))
+                return
+            self.conf["wake_phrase"] = phrase
+            self.wake_enabled.setChecked(True)
+        self._refresh_wake_status()
+
+    def _forget_wake(self):
+        try:
+            os.unlink(str(cfg.WAKE_FILE))
+        except OSError:
+            pass
+        self.wake_enabled.setChecked(False)
+        self._refresh_wake_status()
 
     def _history_tab(self):
         page = QWidget()
@@ -1181,6 +1268,11 @@ class SettingsWindow(QDialog):
 
         self.shortcut.setCurrentText(conf["shortcut"])
         self.evdev_enabled.setChecked(conf["evdev_hotkey"])
+        self.wake_phrase.setText(conf["wake_phrase"])
+        self.wake_sensitivity.setValue(int(round(float(conf["wake_sensitivity"]) * 100)))
+        self._refresh_wake_status()
+        self.wake_enabled.setChecked(
+            conf["wake_enabled"] and self.wake_enabled.isEnabled())
 
         self.history_limit.setValue(max(0, int(conf["history_limit"])))
 
@@ -1304,6 +1396,10 @@ class SettingsWindow(QDialog):
 
         conf["shortcut"] = self.shortcut.currentText().strip() or "Ctrl+Space"
         conf["evdev_hotkey"] = self.evdev_enabled.isChecked()
+        conf["wake_enabled"] = (self.wake_enabled.isChecked()
+                                and self.wake_enabled.isEnabled())
+        conf["wake_phrase"] = self.wake_phrase.text().strip() or "Hey Zeno"
+        conf["wake_sensitivity"] = self.wake_sensitivity.value() / 100.0
         conf["history_limit"] = self.history_limit.value()
         conf.save()
         # A lowered limit should bite now, not on the next dictation.
@@ -2055,3 +2151,63 @@ class SettingsWindow(QDialog):
             self._delete_history()
         elif chosen is clear:
             self._clear_history()
+
+
+class WakeRecorder(QDialog):
+    """Say the phrase a few times, and keep the shape of it.
+
+    It counts sayings rather than running a clock: the segmenter decides where
+    each one begins and ends, so the dialog waits for however long it takes and
+    the person is never cut off mid-phrase.
+    """
+
+    def __init__(self, conf, phrase, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(t("Record the phrase"))
+        self.templates = None
+        self.phrase = phrase
+
+        layout = QVBoxLayout(self)
+        self.instruction = QLabel(t(
+            "Say “{phrase}” {count} times, the way you would say it to wake it "
+            "up — same distance, same voice. Pause between them.",
+            phrase=phrase, count=wake.WANTED,
+        ))
+        self.instruction.setWordWrap(True)
+        layout.addWidget(self.instruction)
+
+        self.progress = QLabel(t("Listening… 0 of {count}", count=wake.WANTED))
+        layout.addWidget(self.progress)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.resize(430, 160)
+
+        self.enroller = wake.Enroller(conf, phrase, parent=self)
+        self.enroller.captured.connect(self._captured)
+        self.enroller.finished.connect(self._finished)
+        self.enroller.failed.connect(self._failed)
+        if not self.enroller.start():
+            QTimer.singleShot(0, self.reject)
+
+    def _captured(self, count, wanted):
+        self.progress.setText(t("Listening… {count} of {wanted}",
+                                count=count, wanted=wanted))
+
+    def _finished(self, templates):
+        self.templates = templates
+        self.enroller.stop()
+        self.accept()
+
+    def _failed(self, message):
+        self.enroller.stop()
+        QMessageBox.warning(
+            self, t("Record the phrase"),
+            message or t("Not enough of the phrase was heard. Try again, a "
+                         "little louder, with a pause between each one."))
+        self.reject()
+
+    def reject(self):
+        self.enroller.stop()
+        super().reject()

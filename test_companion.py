@@ -693,6 +693,14 @@ class Wiring(unittest.TestCase):
         self.dikte.companion.moved.emit(10, 640)
         self.assertEqual(self.dikte.conf["companion_offset"], 640)
 
+    def test_a_shortcut_somebody_else_holds_does_not_take_startup_down(self):
+        """Starting up reports failures through the tray, so the tray has to
+        exist before anything that can fail is started. It did not, and a
+        combination another application already held ended the whole run in an
+        AttributeError on a menu that had not been built yet."""
+        self.dikte.evdev.failed.emit("Ctrl+Space is already taken")
+        self.assertIn("error", self.kinds())
+
     def test_shutting_down_takes_the_character_off_the_screen(self):
         self.dikte.shutdown()
         self.assertFalse(self.dikte.companion.visible)
