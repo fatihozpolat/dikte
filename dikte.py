@@ -44,7 +44,6 @@ import icons  # noqa: E402
 import meeting  # noqa: E402
 import plat  # noqa: E402
 import tts  # noqa: E402
-import wake  # noqa: E402
 import whispercpp  # noqa: E402
 import companion as companion_states  # noqa: E402
 from companion import Companion  # noqa: E402
@@ -106,7 +105,6 @@ class Dikte:
         self.companion = Companion(self.conf)
         self.recorder = audio.Recorder()
         self.live = LiveTranscriber(self.conf, self.recorder)
-        self.wake = wake.WakeListener(self.conf, str(cfg.WAKE_FILE))
         self.voice = tts.Voice(self.conf, cfg.DATA_DIR)
         self.pipeline = Pipeline(self.conf)
         self.ask_pipeline = Pipeline(self.conf)
@@ -155,8 +153,6 @@ class Dikte:
         self.evdev.triggered.connect(self._on_evdev)
         self.evdev.failed.connect(self._on_error)
         self.live.partial.connect(self.companion.live)
-        self.wake.woken.connect(self._on_woken)
-        self.wake.failed.connect(self._on_error)
         self.zeno.state_changed.connect(self._on_zeno_state)
         self.zeno.heard.connect(self.companion.heard)
         self.zeno.answered.connect(lambda text: self.companion.say(text, "agent"))
@@ -164,9 +160,9 @@ class Dikte:
         self.zeno.failed.connect(self._on_zeno_failed)
         self.zeno.finish_dictation.connect(self._paste_for_zeno)
         self.zeno.ask_agent.connect(self._ask_for_zeno)
+        self.zeno.agent_answered.connect(self.zeno.answer)
+        self.zeno.agent_failed.connect(self._on_zeno_failed)
         self.voice.started.connect(self._on_speaking)
-        self.voice.finished.connect(self._refresh_wake)
-        self.voice.failed.connect(lambda _m: self._refresh_wake())
         self.companion.clicked.connect(self._companion_clicked)
         self.companion.moved.connect(self._companion_moved)
         # Started here as well as when the settings are saved: the listener is
@@ -280,29 +276,17 @@ class Dikte:
 
     def _set_state(self, state):
         self.state = state
-        self._refresh_wake()
         self._refresh_tray()
 
     def _set_ask_state(self, state):
         self.ask_state = state
-        self._refresh_wake()
         self._refresh_tray()
 
     def _set_meeting_state(self, state):
         self.meeting_state = state
         if state != M_WORKING:
             self.meeting_message = ""
-        self._refresh_wake()
         self._refresh_tray()
-
-    def _refresh_wake(self):
-        """Deaf whenever the microphone is already being used on purpose.
-
-        What is dictated is not an attempt to wake anything, and an hour of a
-        meeting is an hour of sentences to compare against the phrase for no
-        reason. It keeps capturing either way; only the comparing stops.
-        """
-        self.wake.pause(self.recording or self.meeting_state == M_RECORDING)
 
     def _refresh_tray(self):
         labels = {
@@ -406,7 +390,8 @@ class Dikte:
         if timer is None:
             timer = self.last_evdev[name] = QElapsedTimer()
         timer.restart()
-        handlers = {"meeting": self._toggle_meeting, "ask": self._toggle_ask}
+        handlers = {"meeting": self._toggle_meeting, "ask": self._toggle_ask,
+                    "zeno": self.talk_to_zeno}
         handlers.get(name, self._toggle)()
 
     def _retire_listener(self):
@@ -817,7 +802,6 @@ class Dikte:
         self.overlay.corner = self.conf["overlay_corner"]
         self.ask_overlay.corner = self.conf["overlay_corner"]
         self._apply_companion()
-        self._apply_wake()
         self._apply_local_whisper()
         self._build_tray()
         self._refresh_tray()
@@ -837,33 +821,14 @@ class Dikte:
         self.overlay.set_enabled(not quiet)
         self.ask_overlay.set_enabled(not quiet)
 
-    def _apply_wake(self):
-        """Hold the microphone open only while the setting says to.
-
-        Stopped and started rather than left running and ignored: an always-open
-        microphone is a thing to be doing on purpose, and switching the setting
-        off should close the device rather than merely stop acting on it.
-        """
-        self.wake.stop()
-        if not self.conf["wake_enabled"]:
-            return
-        if not self.wake.start():
-            # Nothing recorded yet, so there is nothing to listen for. Said in
-            # the settings window rather than shouted here on every start.
-            self.conf["wake_enabled"] = False
-
-    def _on_woken(self):
-        """The name was heard. Listen for what comes after it."""
-        self.talk_to_zeno()
-
     def talk_to_zeno(self):
-        """Start a conversation without waiting to be called.
+        """Start a conversation: listen, work out what was meant, do it.
 
-        The same thing the name does, from the tray or the command line.
-        Worth having on its own: the name has to be recorded in your voice
-        before it can be heard at all, and until that is done this is the
-        only way in. It is also the answer in a room where saying a name out
-        loud is not on.
+        Started by a shortcut, by the tray or from the command line rather
+        than by saying a name to it. Listening for one meant holding the
+        microphone open all day to answer a question a key press answers
+        for nothing, and it had to be taught your voice before it worked at
+        all.
         """
         if self.recording or self.state != IDLE or self.zeno.busy:
             return
@@ -875,8 +840,7 @@ class Dikte:
         self._set_state(RECORDING)
 
     def _on_speaking(self):
-        """Deaf while it talks, and visibly talking while it does."""
-        self.wake.pause(True)
+        """Visibly talking while it talks."""
         self.companion.show_speaking()
 
     def _on_zeno_state(self, state):
@@ -890,7 +854,6 @@ class Dikte:
                 self._set_state(IDLE)
             self.recorder_owner = None
             self.companion.show_done()
-        self._refresh_wake()
 
     def _on_zeno_failed(self, message):
         self._report(message, self.overlay)
@@ -917,6 +880,14 @@ class Dikte:
                          daemon=True).start()
 
     def _run_agent(self, question):
+        """Runs on a thread. Everything it has to say leaves by signal.
+
+        A timer would not do: QTimer.singleShot called here starts a timer
+        on this thread, which has no event loop to run it, so it never
+        fires and the answer is dropped without a word. Signals are
+        delivered to the thread the receiver lives on, which is what they
+        are for.
+        """
         try:
             answer, warning = assistant.ask(
                 question, self.conf, on_stage=self.zeno.stage.emit,
@@ -924,9 +895,9 @@ class Dikte:
         except assistant.Cancelled:
             answer, warning = "", ""
         except assistant.AssistantError as exc:
-            QTimer.singleShot(0, lambda: self._on_zeno_failed(str(exc)))
+            self.zeno.agent_failed.emit(str(exc))
             return
-        QTimer.singleShot(0, lambda: self.zeno.answer(answer, warning))
+        self.zeno.agent_answered.emit(answer, warning)
 
     def _companion_clicked(self):
         """The sphere is a button too.
@@ -959,6 +930,7 @@ class Dikte:
         if self.conf["evdev_hotkey"]:
             self.evdev.start({"toggle": self.conf["shortcut"],
                               "ask": self.conf["assistant_shortcut"],
+                              "zeno": self.conf["zeno_shortcut"],
                               "meeting": self.conf["meeting_shortcut"]})
         else:
             self.evdev.stop()
@@ -986,7 +958,6 @@ class Dikte:
         self._quitting = True
         self.evdev.stop()
         self.live.stop()
-        self.wake.stop()
         self.companion.set_visible(False)
         if self.recording:
             self.recorder.cancel()

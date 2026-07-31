@@ -15,9 +15,6 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 DATA_DIR = plat.data_home() / "dikte"
 HISTORY_FILE = DATA_DIR / "history.jsonl"
 RECORDINGS_DIR = DATA_DIR / "recordings"
-# The recordings of the wake phrase, as cepstra rather than as audio: what is
-# kept is the shape the matcher compares against, not anything playable.
-WAKE_FILE = DATA_DIR / "wake.json"
 MEETINGS_DIR = DATA_DIR / "meetings"
 MEETINGS_FILE = DATA_DIR / "meetings.jsonl"
 
@@ -428,15 +425,6 @@ DEFAULTS = {
     "companion_live": True,
     "companion_replaces_overlay": True,
 
-    # --- waking it by voice -----------------------------------------------
-    # Off until it is asked for: a program that holds the microphone open all
-    # day should be doing it because somebody said so, not by default.
-    "wake_enabled": False,
-    "wake_phrase": "Hey Zeno",
-    # Above 1 accepts a looser match, below 1 a stricter one. The threshold
-    # itself comes out of the recordings; this is the dial over the top of it.
-    "wake_sensitivity": 1.0,
-
     # --- its voice --------------------------------------------------------
     # Piper, with the one Turkish voice of the three that measured female:
     # fettah sits at 190 Hz, dfki and fahrettin at 103 and 102.
@@ -479,7 +467,11 @@ DEFAULTS = {
     "meeting_shortcut": "",         # empty -> tray only
 
     # --- speaking a command to an agent -------------------------------------
-    "assistant_shortcut": "",       # empty -> tray only
+    "assistant_shortcut": "",
+    # Zeno listens until you stop talking, works out whether the words
+    # themselves were wanted, and answers out loud. Its own combination,
+    # because it is its own way of using the thing.
+    "zeno_shortcut": "",       # empty -> tray only
     "assistant_provider": "claude",  # claude | codex | openrouter
     "assistant_model": "sonnet",    # Claude Code: an alias, or a full model id
     "assistant_permission_mode": "auto",

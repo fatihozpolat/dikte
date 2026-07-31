@@ -658,75 +658,19 @@ TR = {
         "Yalnızca yerel whisper ile çalışır: OpenAI ya da OpenRouter'da her "
         "konuşma saniyesi ücretli bir istek olurdu. Ayarlar → API ve modeller.",
 
-    # --- waking it by voice, and its own voice ------------------------------
-    "Waking it by voice": "Sesle uyandırma",
-    "Start a dictation when I say the phrase": "İfadeyi söyleyince başlasın",
-    "Holds the microphone open for as long as Dikte runs. Windows shows its "
-    "microphone indicator the whole time, which is the honest sign that "
-    "something is listening.":
-        "Dikte açık olduğu sürece mikrofonu açık tutar. Windows mikrofon "
-        "simgesini bu süre boyunca gösterir; bir şeyin dinlediğinin dürüst "
-        "işareti de budur.",
-    "Phrase": "İfade",
-    "Record the phrase": "İfadeyi kaydet",
-    "Hold the button and say “{phrase}”, then let go. {count} times, "
-    "the way you would say it to wake it up — same distance, same voice.":
-        "Düğmeyi basılı tut ve “{phrase}” de, sonra bırak. {count} kez, onu "
-        "uyandırmak için söyleyeceğin gibi — aynı mesafe, aynı ses.",
-    "Hold and say it": "Basılı tut ve söyle",
-    "Nothing was said in that one — hold the button while you say it.":
-        "Bunda hiçbir şey söylenmedi — söylerken düğmeyi basılı tut.",
-    "Recorded, but the four came out quite different from each other. It may "
-    "answer to things that are not the name. If it does, record it again "
-    "saying it the same way each time, or lower the sensitivity.":
-        "Kaydedildi, ama dördü birbirinden epey farklı çıktı. Ad olmayan "
-        "şeylere de cevap verebilir. Öyle olursa her seferinde aynı şekilde "
-        "söyleyerek yeniden kaydet ya da duyarlılığı düşür.",
-    "Listening — let go when done": "Dinliyorum — bitince bırak",
-    "That one was too short — hold it while you say it.":
-        "Bu çok kısaydı — söylerken basılı tut.",
-    "{count} more to go.": "{count} tane kaldı.",
-    "Working it out…": "Hesaplanıyor…",
-    "Start over": "Baştan al",
-    "Cancel": "Vazgeç",
-    "Record the phrase…": "İfadeyi kaydet…",
-    "Forget it": "Unut",
-    "Sensitivity": "Duyarlılık",
-    "Higher accepts a looser match, so it is caught more often and set off more "
-    "often. Lower is the other way round.":
-        "Yükseltmek daha gevşek eşleşmeyi kabul eder: daha sık yakalar, daha "
-        "sık yanlış tetiklenir. Düşürmek tersi.",
-    "Not recorded yet, so there is nothing to listen for.":
-        "Henüz kaydedilmedi, yani dinlenecek bir şey yok.",
-    "Recorded {count} times as “{phrase}”. Spread: {spread:.1f}.":
-        "“{phrase}” olarak {count} kez kaydedildi. Yayılım: {spread:.1f}.",
-    "Say “{phrase}” {count} times, the way you would say it to wake it up — "
-    "same distance, same voice. Pause between them.":
-        "“{phrase}” ifadesini {count} kez, onu uyandırmak için söyleyeceğin "
-        "gibi söyle — aynı mesafe, aynı ses. Aralarında biraz bekle.",
-    "Listening… 0 of {count}": "Dinleniyor… {count} taneden 0",
-    "Listening… {count} of {wanted}": "Dinleniyor… {wanted} taneden {count}",
-    "Not enough of the phrase was heard. Try again, a little louder, with a "
-    "pause between each one.":
-        "İfade yeterince duyulamadı. Biraz daha yüksek sesle ve aralarında "
-        "bekleyerek tekrar dene.",
-    "Could not save: {error}": "Kaydedilemedi: {error}",
-    "It works by shape, not by recognition: the phrase is recorded a few times "
-    "in your voice, and what the microphone hears is compared against those "
-    "recordings. So it knows your voice saying it, and not much else — which is "
-    "what lets it run without a trained model, a network or an account. Nothing "
-    "playable is stored, and nothing leaves the machine.":
-        "Tanıma değil, biçim eşleştirmesiyle çalışır: ifade senin sesinle "
-        "birkaç kez kaydedilir ve mikrofonun duyduğu bu kayıtlarla "
-        "karşılaştırılır. Yani senin onu söyleyişini bilir, fazlasını değil — "
-        "eğitilmiş bir model, internet ya da hesap gerektirmemesinin sebebi de "
-        "bu. Çalınabilir hiçbir şey saklanmaz, hiçbir şey makineden çıkmaz.",
+    # --- being spoken to ---------------------------------------------------
     "Listening…": "Dinliyorum…",
     "Go ahead, I am listening.": "Buyur, dinliyorum.",
 
+
     "Talk to Zeno": "Zeno'yla konuş",
     "Stop Zeno": "Zeno'yu durdur",
-
+    "Zeno listens until you stop talking, works out whether you wanted the "
+    "words themselves or something done with them, and answers out loud. The "
+    "tray menu and “dikte zeno” start it too.":
+        "Zeno sen konuşmayı bırakana kadar dinler, sözcüklerin kendisini mi "
+        "yoksa onlarla bir şey yapılmasını mı istediğini çıkarır ve sesli "
+        "cevap verir. Tepsi menüsü ve “dikte zeno” da başlatır.",
     "Its voice": "Sesi",
     "Say the answer out loud": "Cevabı sesli söyle",
     "Off, the answer only appears in a bubble beside the character.":

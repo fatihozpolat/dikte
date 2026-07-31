@@ -24,7 +24,6 @@ import hotkey
 import meeting
 import plat
 import tts
-import wake
 import whispercpp
 from filetranscribe import FileTranscriber
 from i18n import t
@@ -986,6 +985,18 @@ class SettingsWindow(QDialog):
         self.shortcut_status.setWordWrap(True)
         layout.addWidget(self.shortcut_status)
 
+        zeno = QFormLayout()
+        self.zeno_shortcut = self._shortcut_box(t("none"))
+        zeno.addRow(t("Talk to Zeno"), self.zeno_shortcut)
+        talking = QLabel(t(
+            "Zeno listens until you stop talking, works out whether you wanted "
+            "the words themselves or something done with them, and answers out "
+            "loud. The tray menu and “dikte zeno” start it too."
+        ))
+        talking.setWordWrap(True)
+        zeno.addRow(talking)
+        layout.addLayout(zeno)
+
         self.evdev_enabled = QCheckBox(hotkey.listener_label())
         self.evdev_enabled.setToolTip(hotkey.listener_hint())
         layout.addWidget(self.evdev_enabled)
@@ -994,7 +1005,6 @@ class SettingsWindow(QDialog):
         note.setWordWrap(True)
         layout.addWidget(note)
 
-        layout.addWidget(self._wake_box())
         layout.addWidget(self._voice_box())
         layout.addStretch(1)
         return page
@@ -1080,97 +1090,6 @@ class SettingsWindow(QDialog):
         # Whatever was settled on in there is what the boxes should now say.
         self.tts_speed.setValue(lab.speed.value())
         self.tts_pitch.setValue(lab.pitch.value())
-
-    def _wake_box(self):
-        box = QGroupBox(t("Waking it by voice"))
-        form = QFormLayout(box)
-
-        self.wake_enabled = QCheckBox(t("Start a dictation when I say the phrase"))
-        self.wake_enabled.setToolTip(t(
-            "Holds the microphone open for as long as Dikte runs. Windows shows "
-            "its microphone indicator the whole time, which is the honest sign "
-            "that something is listening."
-        ))
-        form.addRow("", self.wake_enabled)
-
-        self.wake_phrase = QLineEdit()
-        self.wake_phrase.setPlaceholderText("Hey Zeno")
-        form.addRow(t("Phrase"), self.wake_phrase)
-
-        self.wake_record = QPushButton(t("Record the phrase…"))
-        self.wake_record.clicked.connect(self._record_wake)
-        self.wake_forget = QPushButton(t("Forget it"))
-        self.wake_forget.clicked.connect(self._forget_wake)
-        form.addRow("", self._row(self.wake_record, self.wake_forget))
-
-        self.wake_sensitivity = QSpinBox()
-        self.wake_sensitivity.setRange(50, 200)
-        self.wake_sensitivity.setSuffix(" %")
-        self.wake_sensitivity.setSingleStep(5)
-        self.wake_sensitivity.setToolTip(t(
-            "Higher accepts a looser match, so it is caught more often and set "
-            "off more often. Lower is the other way round."
-        ))
-        form.addRow(t("Sensitivity"), self.wake_sensitivity)
-
-        self.wake_status = QLabel("")
-        self.wake_status.setWordWrap(True)
-        form.addRow(self.wake_status)
-
-        explain = QLabel(t(
-            "It works by shape, not by recognition: the phrase is recorded a few "
-            "times in your voice, and what the microphone hears is compared "
-            "against those recordings. So it knows your voice saying it, and not "
-            "much else — which is what lets it run without a trained model, a "
-            "network or an account. Nothing playable is stored, and nothing "
-            "leaves the machine."
-        ))
-        explain.setWordWrap(True)
-        form.addRow(explain)
-        return box
-
-    def _refresh_wake_status(self):
-        templates = wake.Templates.load(str(cfg.WAKE_FILE))
-        ready = templates.ready
-        self.wake_enabled.setEnabled(ready)
-        self.wake_forget.setEnabled(ready)
-        if not ready:
-            self.wake_enabled.setChecked(False)
-            self.wake_status.setText(
-                t("Not recorded yet, so there is nothing to listen for."))
-            return
-        # The spread is shown rather than judged. It is the number that decides
-        # how readily it answers, and there is no value of it that is right for
-        # every voice and room — so it is put where it can be looked at when
-        # something misbehaves, next to the dial that moves it.
-        spread = max(templates.thresholds) if templates.thresholds else 0.0
-        self.wake_status.setText(t(
-            "Recorded {count} times as “{phrase}”. Spread: {spread:.1f}.",
-            count=len(templates.rows),
-            phrase=templates.phrase or self.wake_phrase.text(),
-            spread=spread))
-
-    def _record_wake(self):
-        phrase = self.wake_phrase.text().strip() or "Hey Zeno"
-        dialog = WakeRecorder(self.conf, phrase, self)
-        if dialog.exec() and dialog.templates is not None:
-            try:
-                dialog.templates.save(str(cfg.WAKE_FILE))
-            except OSError as exc:
-                QMessageBox.warning(self, t("Waking it by voice"),
-                                    t("Could not save: {error}", error=exc))
-                return
-            self.conf["wake_phrase"] = phrase
-            self.wake_enabled.setChecked(True)
-        self._refresh_wake_status()
-
-    def _forget_wake(self):
-        try:
-            os.unlink(str(cfg.WAKE_FILE))
-        except OSError:
-            pass
-        self.wake_enabled.setChecked(False)
-        self._refresh_wake_status()
 
     def _history_tab(self):
         page = QWidget()
@@ -1361,16 +1280,12 @@ class SettingsWindow(QDialog):
 
         self.shortcut.setCurrentText(conf["shortcut"])
         self.evdev_enabled.setChecked(conf["evdev_hotkey"])
-        self.wake_phrase.setText(conf["wake_phrase"])
-        self.wake_sensitivity.setValue(int(round(float(conf["wake_sensitivity"]) * 100)))
+        self.zeno_shortcut.setCurrentText(conf["zeno_shortcut"])
         self.tts_enabled.setChecked(conf["tts_enabled"])
         self.tts_speed.setValue(int(round(float(conf["tts_speed"] or 1.0) * 100)))
         self.tts_pitch.setValue(int(round(float(conf["tts_pitch"] or 1.0) * 100)))
         self.dictation_openings.setPlainText(conf["dictation_openings"])
-        self._refresh_wake_status()
         self._refresh_voice_status()
-        self.wake_enabled.setChecked(
-            conf["wake_enabled"] and self.wake_enabled.isEnabled())
 
         self.history_limit.setValue(max(0, int(conf["history_limit"])))
 
@@ -1494,10 +1409,7 @@ class SettingsWindow(QDialog):
 
         conf["shortcut"] = self.shortcut.currentText().strip() or "Ctrl+Space"
         conf["evdev_hotkey"] = self.evdev_enabled.isChecked()
-        conf["wake_enabled"] = (self.wake_enabled.isChecked()
-                                and self.wake_enabled.isEnabled())
-        conf["wake_phrase"] = self.wake_phrase.text().strip() or "Hey Zeno"
-        conf["wake_sensitivity"] = self.wake_sensitivity.value() / 100.0
+        conf["zeno_shortcut"] = self.zeno_shortcut.currentText().strip()
         conf["tts_enabled"] = self.tts_enabled.isChecked()
         conf["tts_speed"] = self.tts_speed.value() / 100.0
         conf["tts_pitch"] = self.tts_pitch.value() / 100.0
@@ -2253,224 +2165,6 @@ class SettingsWindow(QDialog):
             self._delete_history()
         elif chosen is clear:
             self._clear_history()
-
-
-class Dots(QWidget):
-    """One circle per take, filled in as they are collected.
-
-    A count in words would say the same thing. Four circles say it without
-    being read, which matters while somebody is holding a button down and
-    watching their own hand rather than the text.
-    """
-
-    def __init__(self, total, parent=None):
-        super().__init__(parent)
-        self.total = total
-        self.done = 0
-        self.setMinimumHeight(30)
-
-    def set_done(self, done):
-        self.done = max(0, min(self.total, done))
-        self.update()
-
-    def paintEvent(self, _event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        radius = 9.0
-        gap = 30.0
-        left = (self.width() - (self.total - 1) * gap) / 2.0
-        for index in range(self.total):
-            centre = QPointF(left + index * gap, self.height() / 2.0)
-            if index < self.done:
-                painter.setBrush(QColor("#2FC08A"))
-                painter.setPen(QPen(QColor("#9BF0C8"), 1.5))
-            else:
-                painter.setBrush(QColor(255, 255, 255, 16))
-                painter.setPen(QPen(QColor(255, 255, 255, 60), 1.5))
-            painter.drawEllipse(centre, radius, radius)
-        painter.end()
-
-
-class HoldButton(QPushButton):
-    """A button that reports being held rather than being clicked."""
-
-    pressed_down = pyqtSignal()
-    released_up = pyqtSignal()
-
-    def mousePressEvent(self, event):
-        super().mousePressEvent(event)
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.pressed_down.emit()
-
-    def mouseReleaseEvent(self, event):
-        super().mouseReleaseEvent(event)
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.released_up.emit()
-
-    def keyPressEvent(self, event):
-        # Space and Enter hold it too, and Qt repeats them while held; only the
-        # first counts, or one long press reads as a hundred short ones.
-        held = (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter)
-        if event.key() in held and not event.isAutoRepeat():
-            self.pressed_down.emit()
-        super().keyPressEvent(event)
-
-    def keyReleaseEvent(self, event):
-        held = (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter)
-        if event.key() in held and not event.isAutoRepeat():
-            self.released_up.emit()
-        super().keyReleaseEvent(event)
-
-
-class WakeRecorder(QDialog):
-    """Say the name a few times, holding a button for each one.
-
-    Held rather than detected. Working out where a word begins and ends from
-    loudness is the right answer later, when nobody is there to say; here
-    somebody is, and their finger beats any threshold. It also means a take is
-    never half a cough, and never two sayings run together because the pause
-    between them was short.
-
-    The microphone is opened once, when this window opens, and left running.
-    Opening a capture costs about a third of a second, which is most of a short
-    word, so pressing the button moves a mark in a stream that is already
-    flowing rather than starting a device.
-    """
-
-    def __init__(self, conf, phrase, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(t("Record the phrase"))
-        self.templates = None
-        self.phrase = phrase
-        self.takes = []
-
-        layout = QVBoxLayout(self)
-        self.instruction = QLabel(t(
-            "Hold the button and say “{phrase}”, then let go. {count} times, "
-            "the way you would say it to wake it up — same distance, same voice.",
-            phrase=phrase, count=wake.WANTED,
-        ))
-        self.instruction.setWordWrap(True)
-        layout.addWidget(self.instruction)
-
-        self.dots = Dots(wake.WANTED)
-        layout.addWidget(self.dots)
-
-        self.button = HoldButton(t("Hold and say it"))
-        self.button.setMinimumHeight(54)
-        self.button.pressed_down.connect(self._down)
-        self.button.released_up.connect(self._up)
-        layout.addWidget(self.button)
-
-        self.meter = QProgressBar()
-        self.meter.setRange(0, 100)
-        self.meter.setTextVisible(False)
-        self.meter.setMaximumHeight(6)
-        layout.addWidget(self.meter)
-
-        self.status = QLabel("")
-        self.status.setWordWrap(True)
-        layout.addWidget(self.status)
-
-        row = QHBoxLayout()
-        self.again = QPushButton(t("Start over"))
-        self.again.clicked.connect(self._restart)
-        self.again.setEnabled(False)
-        row.addWidget(self.again)
-        row.addStretch(1)
-        cancel = QPushButton(t("Cancel"))
-        cancel.clicked.connect(self.reject)
-        row.addWidget(cancel)
-        layout.addLayout(row)
-        self.resize(470, 270)
-
-        self.recorder = wake.HoldRecorder(conf, parent=self)
-        self.recorder.captured.connect(self._took)
-        self.recorder.rejected.connect(self._too_short)
-        self.recorder.level.connect(self._on_level)
-        self.recorder.failed.connect(self._failed)
-        self._refresh()
-        if not self.recorder.start():
-            QTimer.singleShot(0, self.reject)
-
-    # ---- holding it -------------------------------------------------------
-
-    def _down(self):
-        if len(self.takes) >= wake.WANTED:
-            return
-        self.recorder.press()
-        self.button.setText(t("Listening — let go when done"))
-        self.status.setText("")
-
-    def _up(self):
-        self.recorder.release()
-        self.button.setText(t("Hold and say it"))
-
-    def _took(self, samples):
-        self.takes.append(samples)
-        self.dots.set_done(len(self.takes))
-        self._refresh()
-        if len(self.takes) >= wake.WANTED:
-            QTimer.singleShot(200, self._finish)
-
-    def _too_short(self, why):
-        self.status.setText(
-            t("Nothing was said in that one — hold the button while you say it.")
-            if why == "silent"
-            else t("That one was too short — hold it while you say it."))
-
-    def _on_level(self, level):
-        self.meter.setValue(int(min(1.0, level * 3.0) * 100))
-
-    def _restart(self):
-        self.takes = []
-        self.dots.set_done(0)
-        self._refresh()
-
-    def _refresh(self):
-        left = wake.WANTED - len(self.takes)
-        self.again.setEnabled(bool(self.takes))
-        self.status.setText(
-            t("{count} more to go.", count=left) if left
-            else t("Working it out…"))
-
-    # ---- what comes of it -------------------------------------------------
-
-    def _finish(self):
-        self.recorder.stop()
-        rows = [wake.head_features(take) for take in self.takes]
-        rows = [row for row in rows if row]
-        if len(rows) < 2:
-            self._failed("")
-            return
-        self.templates = wake.calibrate(rows, self.phrase)
-        if not self.templates.ready:
-            self.templates = None
-            self._failed("")
-            return
-        if self.templates.loose:
-            # Kept, not refused. How alike four sayings of a word are depends
-            # on the voice and the room, so there is no distance that means
-            # "wrong" — only one worth mentioning, with what to do about it.
-            QMessageBox.information(
-                self, t("Record the phrase"),
-                t("Recorded, but the four came out quite different from each "
-                  "other. It may answer to things that are not the name. If it "
-                  "does, record it again saying it the same way each time, or "
-                  "lower the sensitivity."))
-        self.accept()
-
-    def _failed(self, message):
-        self.recorder.stop()
-        QMessageBox.warning(
-            self, t("Record the phrase"),
-            message or t("Not enough of the phrase was heard. Try again, a "
-                         "little louder, with a pause between each one."))
-        self.reject()
-
-    def reject(self):
-        self.recorder.stop()
-        super().reject()
 
 
 SAMPLE_SPEECH = """Tamam, hallettim. Perşembe saat üçe **toplantı** eklendi.

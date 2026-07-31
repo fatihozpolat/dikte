@@ -14,13 +14,8 @@ Reading the names would have picked the wrong one.
 
 Speech is queued a sentence at a time rather than an answer at a time. A long
 reply then starts being spoken while the rest of it is still being made, and
-stopping — because the wake word was said again, or the answer is no longer
-wanted — takes effect at the end of the current sentence instead of at the end
-of the paragraph.
-
-The one rule that matters beyond the sound: whoever owns the microphone has to
-be told to stop listening while this is talking, or the assistant hears itself
-say its own name.
+stopping — because the answer is no longer wanted — takes effect at the end of
+the current sentence instead of at the end of the paragraph.
 """
 
 import contextlib

@@ -1,24 +1,21 @@
-"""The loop that turns a name being said into something happening.
+"""The loop from being asked to listen to having answered.
 
-    waiting → woken → listening → working → answering → waiting
+    waiting → listening → working → answering → waiting
 
-Dictation, until now, was a thing with a beginning and an end that a person
-supplied: press, talk, press. Being spoken to has neither. The name arrives
-unannounced and the instruction ends when the speaking does, so both edges have
-to be found rather than given, and everything after them has to run without
-anybody there to notice it went wrong.
+Dictation is a thing with a beginning and an end that a person supplies: press,
+talk, press. This has only the beginning. The instruction ends when the speaking
+does, so that edge has to be found rather than given, and everything after it
+runs without anybody there to notice it went wrong.
 
 Three rules hold the whole thing together, and each is here because breaking it
 is worse than it sounds:
 
-  * One microphone, one owner. The wake listener holds it open all day; the
-    recorder wants it for an instruction; a meeting wants it for an hour. They
-    are allowed to overlap on the device — that was measured — but not to act
-    at once, or the instruction wakes it again halfway through being given.
-  * It never listens to itself. Speaking is the loudest thing the microphone
-    will hear all day, and it is speaking the assistant's own words, in a voice
-    that says its own name. The listener is deaf from before the first sample
-    until after the last.
+  * One microphone, one owner. A dictation wants it, an instruction wants it,
+    a meeting wants it for an hour, and only one of them may have it.
+  * What the agent comes back with crosses a thread boundary, and it crosses
+    it by signal. A timer started on a worker thread is started on a thread
+    with no event loop to run it and never fires at all — which is how every
+    answer was lost, silently, until it was measured.
   * Silence ends the instruction, but only after long enough to think. People
     stop mid-sentence to find a word. Cutting at the first gap loses the half of
     the sentence that mattered.
@@ -34,8 +31,8 @@ import vad
 from i18n import t
 
 # What state it is in, in the order it goes through them.
-WAITING = "waiting"        # listening for the name and nothing else
-LISTENING = "listening"    # the name was heard; this is the instruction
+WAITING = "waiting"        # nothing going on
+LISTENING = "listening"    # taking the instruction
 WORKING = "working"        # transcribing, deciding, doing
 ANSWERING = "answering"    # saying the answer out loud
 
@@ -46,8 +43,8 @@ PATIENCE_SECONDS = 5.0
 
 # Quiet this long ends the instruction. Much longer than the gap that separates
 # one utterance from the next, because a person pausing to find a word has not
-# finished talking, and a wake word cut off at the first hesitation is one that
-# has to be repeated.
+# finished talking, and an instruction cut off at the first hesitation is one
+# that has to be given again.
 SETTLE_SECONDS = 1.4
 
 # Nobody dictates a paragraph to an assistant in one go; past this it is a room
@@ -70,6 +67,13 @@ class Conversation(QObject):
     # This module decides what was meant; it does not reach for anything itself.
     finish_dictation = pyqtSignal(str)
     ask_agent = pyqtSignal(str)
+    # The agent runs on a thread of its own, and what it comes back with has
+    # to cross back to the one the interface lives on. A signal is the only
+    # thing that does that: a timer started on a worker thread is started on
+    # a thread with no event loop to run it, and never fires at all. Which is
+    # exactly what happened — the answer arrived and nothing was ever told.
+    agent_answered = pyqtSignal(str, str)
+    agent_failed = pyqtSignal(str)
 
     def __init__(self, conf, recorder, pipeline, voice, parent=None):
         super().__init__(parent)
@@ -109,7 +113,7 @@ class Conversation(QObject):
     # ---- being called -----------------------------------------------------
 
     def wake(self):
-        """The name was heard. Start listening for what comes after it."""
+        """Asked for. Start listening for the instruction."""
         if self.busy:
             return False
         if not self.recorder.active:
@@ -164,8 +168,8 @@ class Conversation(QObject):
                 self._spoke_at = now
 
         if not self._heard_speech:
-            # Called, and then nothing. Say nothing back: a name misheard from
-            # the television should cost a moment of listening and no more.
+            # Asked for, and then nothing said. Say nothing back: a key
+            # pressed by accident should cost a moment and no more.
             if elapsed > PATIENCE_SECONDS:
                 self._watch.stop()
                 self.recorder.cancel()

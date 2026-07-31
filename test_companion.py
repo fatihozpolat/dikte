@@ -693,9 +693,9 @@ class Wiring(unittest.TestCase):
         self.dikte.companion.moved.emit(10, 640)
         self.assertEqual(self.dikte.conf["companion_offset"], 640)
 
-    def test_a_conversation_can_be_started_without_saying_the_name(self):
-        """The name has to be recorded in your own voice before it can be heard
-        at all, so there has to be a way in that does not need it."""
+    def test_a_conversation_is_started_by_a_key_and_not_by_a_name(self):
+        """Listening for a name meant holding the microphone open all day to
+        answer a question a key press answers for nothing."""
         started = []
         self.dikte.zeno.wake = lambda: started.append(True) or True
         self.dikte.talk_to_zeno()

@@ -1,6 +1,6 @@
 # Dikte
 
-Say **Zeno**, or press `Ctrl+Space`, and talk. The recording is transcribed by whisper.cpp
+Press `Ctrl+Space` and talk. The recording is transcribed by whisper.cpp
 on your own machine, a model on OpenRouter cleans it up (dropping the *uh*s, the
 restarts, the missing punctuation), and the result lands in your clipboard and
 is pasted into whatever window you were typing in. OpenAI and OpenRouter are
@@ -87,7 +87,7 @@ which are worth thinking about, to think.
 | What | How |
 | --- | --- |
 | Start / stop recording | `Ctrl+Space`, or click the tray icon |
-| Talk to Zeno | say its name, tray menu → *Talk to Zeno*, or `dikte zeno` |
+| Talk to Zeno | its shortcut, tray menu → *Talk to Zeno*, or `dikte zeno` |
 | Stop it talking | click the sphere |
 | Cancel a recording | Tray menu → *Cancel recording*, or `dikte cancel` |
 | Speak a command to an agent | Tray menu → *Ask Claude*, or `dikte ask` |
@@ -116,8 +116,9 @@ second one stacks above the first while both are up.
 
 ## Talking to it
 
-Say its name — **Zeno** — wait for the sphere to light up, then say what you
-want. It works out which of two things you meant:
+Press its shortcut, or pick **Talk to Zeno** from the tray, and say what you
+want. It listens until you stop talking and works out which of two things you
+meant:
 
 | What you say | What happens |
 | --- | --- |
@@ -134,42 +135,8 @@ the bubble is left. When it is on, the agent is told it is being listened to
 rather than read, so it answers in a sentence instead of in headings and bullet
 points.
 
-You do not have to say the name at all: the tray menu and `dikte zeno` start the same conversation, which is also the only way in until the name has been recorded in your voice, and the answer in a room where saying a name out loud is not on. Clicking the sphere while it is talking or working calls it off.
-
-Waking it needs the name on its own, with a pause after it. "Zeno, put that in
-my calendar" said in one breath does not work, and that was measured rather than
-assumed — see the note under **Hearing its name** below.
-
-### Hearing its name
-
-There is no model here and nothing running in the cloud. The name is recorded
-four times in your own voice under Settings → Shortcut → *Record the phrase* —
-hold the button while you say it and let go, four times, with a green dot filling
-in for each one —
-its mel-cepstral shape is kept, and what the microphone hears is compared
-against those recordings by dynamic time warping — the method that came before
-the trained networks, and the one that is still right when there is exactly one
-speaker to recognise.
-
-Energy alone decides where an utterance starts and ends, so a quiet room costs
-one comparison per block and no arithmetic at all; only what falls between those
-two points is turned into features, at about nine milliseconds a second of
-speech. Holding the microphone open does not stop anything else using it — two
-captures of one device were checked to coexist — but Windows will show its
-microphone indicator for as long as Dikte runs, which is the honest sign that
-something is listening. It is off until you turn it on.
-
-What it costs you is that it knows *your* voice saying it, in the room you
-recorded it in, and not much else. On synthesised speech the name alone scored
-0.73 and 0.78 against a limit of 1.0, and the nearest of six decoys — including
-"Zeynep" and "Hey dostum" — scored 2.12. A real voice varies more than a
-synthesiser does.
-
-Saying the name and the instruction in one breath was built, fixed twice, and
-then removed: matching the name against the front of a longer utterance let
-speech that was *not* the name score better than the name followed by an
-instruction, so no threshold separated them and there was nothing to tune. The
-code that promised it is gone rather than left in looking like it works.
+Clicking the sphere while it is talking or working calls it off. The shortcut
+is under Settings → Shortcut; `dikte zeno` does the same thing from a terminal.
 
 ### Its voice
 
@@ -326,8 +293,7 @@ happens, and another combination is the answer.
 dikte.py          entry point, tray icon, state machine, IPC
 plat.py           what the two platforms do differently, in one place
 companion.py      the sphere on the edge of the screen, and its bubbles
-wake.py           hearing its name, on mel-cepstra and time warping
-conversation.py   the loop from the name being said to the answer being given
+conversation.py   the loop from being asked to listen to having answered
 router.py         whether the words were wanted, or something done with them
 tts.py            saying the answer out loud, through Piper
 live.py           re-reading the audio so far, while it is still being spoken

@@ -1,6 +1,6 @@
 # Dikte
 
-**Zeno** de, ya da `Ctrl+Space`'e bas, konuş. Ses kendi makinende whisper.cpp ile yazıya
+`Ctrl+Space`'e bas, konuş. Ses kendi makinende whisper.cpp ile yazıya
 çevrilir, OpenRouter'daki bir model transkripti temizler (ıı'lar, tekrarlar,
 eksik noktalama), sonuç panoya kopyalanır ve o an yazdığın pencereye
 yapıştırılır. Yazıya çevirme için OpenAI ve OpenRouter da seçenek olarak duruyor.
@@ -88,7 +88,7 @@ tutanağı ise düşünmeye bırakıyor.
 | Ne | Nasıl |
 | --- | --- |
 | Kaydı başlat / bitir | `Ctrl+Space`, ya da tepsi simgesine tıkla |
-| Zeno'yla konuş | adını söyle, tepsi menüsü → *Zeno'yla konuş*, ya da `dikte zeno` |
+| Zeno'yla konuş | kısayolu, tepsi menüsü → *Zeno'yla konuş*, ya da `dikte zeno` |
 | Konuşmasını kes | küreye tıkla |
 | Kaydı iptal et | Tepsi menüsü → *Kaydı iptal et*, ya da `dikte cancel` |
 | Ajana sesle komut ver | Tepsi menüsü → *Claude'a sor*, ya da `dikte ask` |
@@ -117,8 +117,8 @@ birden ekrandayken ikincisi birincinin üstüne yerleşir.
 
 ## Onunla konuşmak
 
-Adını söyle — **Zeno** — küre canlanana kadar bekle, sonra ne istediğini söyle.
-İki şeyden hangisini kastettiğini kendisi çözer:
+Kısayoluna bas ya da tepsi menüsünden **Zeno'yla konuş**'u seç ve ne istediğini
+söyle. Sen susana kadar dinler, iki şeyden hangisini kastettiğini kendisi çözer:
 
 | Ne dersin | Ne olur |
 | --- | --- |
@@ -134,39 +134,8 @@ Cevap hem sesli söylenir hem balonda görünür. Sesi kapatırsan yalnızca bal
 kalır. Açıkken ajana, okunmak yerine dinlendiği söylenir; o da başlık ve madde
 işaretleriyle değil, tek cümleyle cevap verir.
 
-Adı söylemek zorunda değilsin: tepsi menüsü ve `dikte zeno` aynı konuşmayı başlatır. Ad kendi sesinle kaydedilene kadar zaten tek yol budur; sesli bir ad söylemenin uygun olmadığı bir odada da cevap budur. Konuşurken ya da çalışırken küreye tıklamak onu keser.
-
-Uyandırmak için adın tek başına ve arkasından bir duraklamayla söylenmesi
-gerekiyor. "Zeno, şunu takvime ekle" tek nefeste çalışmaz — bu varsayım değil,
-ölçüm; aşağıdaki **Adını duyması** başlığına bak.
-
-### Adını duyması
-
-Burada ne bir model var ne de bulutta çalışan bir şey. Ad, Ayarlar → Kısayol →
-*İfadeyi kaydet* altında kendi sesinle dört kez kaydedilir — söylerken düğmeyi
-basılı tut ve bırak, dört kez; her biri için bir nokta yeşile döner — mel-kepstral biçimi
-saklanır ve mikrofonun duyduğu şey bu kayıtlarla dinamik zaman bükmesiyle
-karşılaştırılır — eğitilmiş ağlardan önce gelen ve tanınacak tek bir konuşmacı
-olduğunda hâlâ doğru olan yöntem.
-
-Sözcenin nerede başlayıp bittiğine yalnızca enerji karar verir; sessiz bir oda
-blok başına bir karşılaştırmaya mal olur, hiç aritmetik yapılmaz. Yalnızca o iki
-nokta arasında kalan kısım özniteliğe çevrilir, saniyesi yaklaşık dokuz
-milisaniye. Mikrofonu açık tutmak başka programların onu kullanmasını
-engellemez — aynı aygıtın iki yakalaması bir arada sınandı — ama Windows, Dikte
-çalıştığı sürece mikrofon simgesini gösterir; bir şeyin dinlediğinin dürüst
-işareti de budur. Sen açana kadar kapalıdır.
-
-Bunun bedeli şu: **senin** sesini, kaydettiğin odada, o ifadeyi söylerken bilir;
-fazlasını değil. Sentezlenmiş konuşmada ad tek başına 1,0 sınırına karşı 0,73 ve
-0,78 aldı; altı tuzağın en yakını — "Zeynep" ve "Hey dostum" dahil — 2,12.
-Gerçek bir ses sentezleyiciden daha çok değişir.
-
-Adı ve komutu tek nefeste söylemek yazıldı, iki kez düzeltildi ve sonra
-kaldırıldı: adı daha uzun bir sözcenin başında aramak, ad **olmayan** konuşmanın
-addan-sonra-komuttan daha iyi skor almasına yol açtı; hiçbir eşik bunları
-ayırmıyordu, yani ayarlanacak bir şey de yoktu. Sözü veren kod, çalışıyormuş gibi
-durmaktansa silindi.
+Konuşurken ya da çalışırken küreye tıklamak onu keser. Kısayolu Ayarlar → Kısayol
+altında; `dikte zeno` de aynı şeyi terminalden yapar.
 
 ### Sesi
 
@@ -321,8 +290,7 @@ uygulamanın zaten tuttuğu bir kombinasyon hiç alınamaz. Öyle bir durumda Ay
 dikte.py          giriş noktası, tepsi simgesi, durum makinesi, IPC
 plat.py           iki platformun farklı yaptığı şeyler, tek yerde
 companion.py      ekranın kenarındaki küre ve balonları
-wake.py           adını duyma: mel-kepstrum ve zaman bükmesiyle
-conversation.py   ad söylenmesinden cevabın verilmesine kadarki döngü
+conversation.py   dinlemesi istenmesinden cevabı vermesine kadarki döngü
 router.py         sözcükler mi isteniyordu, onlarla bir şey yapılması mı
 tts.py            cevabı sesli söyleme, Piper üzerinden
 live.py           o ana kadarki sesi, konuşma sürerken yeniden okuma
