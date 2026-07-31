@@ -676,10 +676,12 @@ TR = {
     "Hold and say it": "Basılı tut ve söyle",
     "Nothing was said in that one — hold the button while you say it.":
         "Bunda hiçbir şey söylenmedi — söylerken düğmeyi basılı tut.",
-    "Those four did not sound alike enough to go on. Say it the same way "
-    "each time, and start over.":
-        "Bu dördü devam edecek kadar birbirine benzemiyor. Her seferinde "
-        "aynı şekilde söyle ve baştan al.",
+    "Recorded, but the four came out quite different from each other. It may "
+    "answer to things that are not the name. If it does, record it again "
+    "saying it the same way each time, or lower the sensitivity.":
+        "Kaydedildi, ama dördü birbirinden epey farklı çıktı. Ad olmayan "
+        "şeylere de cevap verebilir. Öyle olursa her seferinde aynı şekilde "
+        "söyleyerek yeniden kaydet ya da duyarlılığı düşür.",
     "Listening — let go when done": "Dinliyorum — bitince bırak",
     "That one was too short — hold it while you say it.":
         "Bu çok kısaydı — söylerken basılı tut.",
@@ -696,8 +698,8 @@ TR = {
         "sık yanlış tetiklenir. Düşürmek tersi.",
     "Not recorded yet, so there is nothing to listen for.":
         "Henüz kaydedilmedi, yani dinlenecek bir şey yok.",
-    "Recorded {count} times as “{phrase}”.":
-        "“{phrase}” olarak {count} kez kaydedildi.",
+    "Recorded {count} times as “{phrase}”. Spread: {spread:.1f}.":
+        "“{phrase}” olarak {count} kez kaydedildi. Yayılım: {spread:.1f}.",
     "Say “{phrase}” {count} times, the way you would say it to wake it up — "
     "same distance, same voice. Pause between them.":
         "“{phrase}” ifadesini {count} kez, onu uyandırmak için söyleyeceğin "

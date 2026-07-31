@@ -1139,9 +1139,16 @@ class SettingsWindow(QDialog):
             self.wake_status.setText(
                 t("Not recorded yet, so there is nothing to listen for."))
             return
+        # The spread is shown rather than judged. It is the number that decides
+        # how readily it answers, and there is no value of it that is right for
+        # every voice and room — so it is put where it can be looked at when
+        # something misbehaves, next to the dial that moves it.
+        spread = max(templates.thresholds) if templates.thresholds else 0.0
         self.wake_status.setText(t(
-            "Recorded {count} times as “{phrase}”.",
-            count=len(templates.rows), phrase=templates.phrase or self.wake_phrase.text()))
+            "Recorded {count} times as “{phrase}”. Spread: {spread:.1f}.",
+            count=len(templates.rows),
+            phrase=templates.phrase or self.wake_phrase.text(),
+            spread=spread))
 
     def _record_wake(self):
         phrase = self.wake_phrase.text().strip() or "Hey Zeno"
@@ -2438,11 +2445,19 @@ class WakeRecorder(QDialog):
             return
         self.templates = wake.calibrate(rows, self.phrase)
         if not self.templates.ready:
-            # They did not sound like each other, so they are not one word.
             self.templates = None
-            self._failed(t("Those four did not sound alike enough to go on. "
-                           "Say it the same way each time, and start over."))
+            self._failed("")
             return
+        if self.templates.loose:
+            # Kept, not refused. How alike four sayings of a word are depends
+            # on the voice and the room, so there is no distance that means
+            # "wrong" — only one worth mentioning, with what to do about it.
+            QMessageBox.information(
+                self, t("Record the phrase"),
+                t("Recorded, but the four came out quite different from each "
+                  "other. It may answer to things that are not the name. If it "
+                  "does, record it again saying it the same way each time, or "
+                  "lower the sensitivity."))
         self.accept()
 
     def _failed(self, message):

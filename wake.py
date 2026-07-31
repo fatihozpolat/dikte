@@ -351,12 +351,19 @@ class Templates:
 
     @property
     def ready(self):
-        if len(self.rows) < 2 or not self.thresholds:
-            return False
-        # Recordings that do not resemble each other are not a wake
-        # word, whatever they are. Better to say so than to hand back
-        # something that answers to every sound in the room.
-        return max(self.thresholds) <= ACCEPT_CEILING
+        return len(self.rows) >= 2 and bool(self.thresholds)
+
+    @property
+    def loose(self):
+        """Whether what came out is wide enough to be worth warning about.
+
+        Not a refusal. There is no distance that means "not the same
+        word": how alike four sayings are depends on the voice and the
+        room, and a line drawn here was measured turning away real
+        recordings while a quiet room passed. So it is said rather than
+        enforced, and the sensitivity dial is what it is said for.
+        """
+        return bool(self.thresholds) and max(self.thresholds) > ACCEPT_LOOSE
 
     def mean_length(self):
         return sum(self.lengths) / len(self.lengths) if self.lengths else 0.0
@@ -435,12 +442,53 @@ class Templates:
 
 
 ACCEPT_MARGIN = 1.35    # how much worse than its twin a reading may be
-# Above this the recordings disagree too much to have been the same
-# phrase, and a threshold drawn from them would wake on anything. Seen
-# for real: four takes of a silent room calibrated to 24, where takes of
-# an actual word sit near 2.5.
-ACCEPT_CEILING = 9.0
+# Past this the recordings are wide enough that the name will be heard in
+# things that are not it. Worth saying; not worth refusing over.
+ACCEPT_LOOSE = 8.5
 ACCEPT_FLOOR = 0.9      # and never tighter than this, however alike two takes were
+# How far from the rest a take may sit before it is treated as a slip rather
+# than as a saying: a cough, a false start, the word said twice. Relative to
+# the others, because how alike four sayings of a word are depends entirely on
+# the voice and the room.
+OUTLIER_FACTOR = 2.5
+
+
+def _nearest_distances(rows):
+    """For each recording, how far the closest of the others is."""
+    return [min(distance(rows[index], other)
+                for position, other in enumerate(rows) if position != index)
+            for index in range(len(rows))]
+
+
+def winnow(rows):
+    """Drop takes that do not belong with the rest. Returns what to keep.
+
+    One bad take out of four should cost that take, not the whole recording.
+    Somebody clears their throat, starts again, or says it twice; the other
+    three are perfectly good and the calibration is better without the fourth
+    than it would be with it.
+
+    Judged against the median of the others rather than against a number.
+    There is no absolute distance that means "not the same word": how alike
+    four sayings are depends on the voice, the room and the microphone, and a
+    fixed line drawn here was measured rejecting real recordings while letting
+    a quiet room through — the two overlap, so the line was never going to be
+    in the right place.
+    """
+    if len(rows) < 3:
+        return list(rows)
+    nearest = _nearest_distances(rows)
+    ordered = sorted(nearest)
+    middle = ordered[len(ordered) // 2]
+    limit = max(middle * OUTLIER_FACTOR, ACCEPT_FLOOR)
+    kept = [row for row, near in zip(rows, nearest) if near <= limit]
+    if len(kept) >= 2:
+        return kept
+    # Everything looks like an outlier, which means nothing agrees with
+    # anything. Keep the two that are least unlike each other and let the
+    # threshold they produce say how well that went.
+    closest = sorted(range(len(rows)), key=lambda index: nearest[index])[:2]
+    return [rows[index] for index in closest]
 
 
 def calibrate(recordings, phrase=""):
@@ -453,14 +501,11 @@ def calibrate(recordings, phrase=""):
     loose one, which is the right answer in both cases and not one that could be
     guessed from outside.
     """
-    rows = [r for r in recordings if r]
+    rows = winnow([r for r in recordings if r])
     if len(rows) < 2:
         return Templates(phrase, rows, 0.0, [len(r) for r in rows], [])
-    thresholds = []
-    for index, template in enumerate(rows):
-        nearest = min(distance(template, other)
-                      for position, other in enumerate(rows) if position != index)
-        thresholds.append(max(nearest * ACCEPT_MARGIN, ACCEPT_FLOOR))
+    nearest = _nearest_distances(rows)
+    thresholds = [max(near * ACCEPT_MARGIN, ACCEPT_FLOOR) for near in nearest]
     return Templates(phrase, rows, sum(thresholds) / len(thresholds),
                      [len(r) for r in rows], thresholds)
 

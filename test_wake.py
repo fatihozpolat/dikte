@@ -502,9 +502,29 @@ class TheWholePath(unittest.TestCase):
         _missed, far, _end = again.matches(wake.head_features(other))
         self.assertLess(near * 2, far)
 
-    def test_recordings_that_are_not_the_same_word_are_refused(self):
-        """Four takes of a quiet room calibrate to a threshold that would wake
-        on anything. Saying so beats handing one back."""
+    def test_the_odd_take_out_is_dropped_rather_than_failing_the_lot(self):
+        """One bad take out of four costs that take, not the recording.
+        Somebody clears their throat or starts again; the other three are
+        perfectly good and the calibration is better without the fourth."""
+        good = [wake.head_features(self.taken(seed, pad)) for seed, pad
+                in ((1, 0.1), (2, 0.3), (3, 0.2))]
+        cough = wake.head_features(
+            wake.trim([0] * int(audio.RATE * 0.2) + speechy(1.5, 95.0, seed=9)))
+        kept = wake.calibrate(good + [cough])
+        self.assertEqual(len(kept.rows), 3)
+        self.assertTrue(kept.ready)
+        # And with nothing to drop, nothing is dropped.
+        self.assertEqual(len(wake.calibrate(good).rows), 3)
+
+    def test_two_recordings_are_never_winnowed_down_to_one(self):
+        pair = [wake.head_features(self.taken(1)), wake.head_features(self.taken(9))]
+        self.assertEqual(len(wake.winnow(pair)), 2)
+
+    def test_wide_recordings_are_kept_but_flagged(self):
+        """There is no distance that means "not the same word": how alike four
+        sayings are depends on the voice and the room, and a line drawn here
+        was measured turning away real recordings while a quiet room passed.
+        So it is said rather than enforced."""
         # A quiet room, not digital silence: perfect zeros are identical to
         # each other and calibrate to the floor, which is the one kind of
         # nothing this cannot be caught out by. Real hiss is random, and four
@@ -513,10 +533,14 @@ class TheWholePath(unittest.TestCase):
         hiss = [wake.head_features(
             [int(random.gauss(0, 60)) for _ in range(int(audio.RATE * 1.2))])
             for _ in range(4)]
-        self.assertFalse(wake.calibrate(hiss).ready)
-        wild = [wake.head_features(speechy(1.0, pitch, seed=int(pitch)))
-                for pitch in (90.0, 200.0, 130.0, 320.0)]
-        self.assertFalse(wake.calibrate(wild).ready)
+        loose = wake.calibrate(hiss)
+        self.assertTrue(loose.ready)          # usable, if it is what you meant
+        self.assertTrue(loose.loose)          # and said to be wide
+
+        tight = wake.calibrate(
+            [wake.head_features(self.taken(seed, pad)) for seed, pad
+             in ((1, 0.1), (2, 0.3), (3, 0.2), (4, 0.45))])
+        self.assertFalse(tight.loose)
 
     def test_the_listener_will_not_start_before_the_name_is_recorded(self):
         listener = wake.WakeListener(self.conf, self.path)
