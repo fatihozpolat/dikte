@@ -1013,8 +1013,8 @@ class SettingsWindow(QDialog):
         self.tts_speed.setSuffix(" %")
         form.addRow(t("Speed"), self.tts_speed)
 
-        self.tts_try = QPushButton(t("Hear it"))
-        self.tts_try.clicked.connect(self._try_voice)
+        self.tts_try = QPushButton(t("Try the voice…"))
+        self.tts_try.clicked.connect(self._open_voice_lab)
         form.addRow("", self.tts_try)
 
         self.tts_status = QLabel("")
@@ -1059,15 +1059,12 @@ class SettingsWindow(QDialog):
             self.tts_status.setText(t("Ready: {voice}",
                                       voice=os.path.basename(voice)))
 
-    def _try_voice(self):
+    def _open_voice_lab(self):
+        """A window to hear it in, and to see what it does before it speaks."""
         self.conf["tts_speed"] = self.tts_speed.value() / 100.0
-        was, self.conf["tts_enabled"] = self.conf["tts_enabled"], True
-        try:
-            self._voice = getattr(self, "_voice", None) or tts.Voice(self.conf,
-                                                                    cfg.DATA_DIR)
-            self._voice.say(t("Merhaba, ben Zeno. Seni dinliyorum."))
-        finally:
-            self.conf["tts_enabled"] = was
+        lab = VoiceLab(self.conf, cfg.DATA_DIR, self)
+        lab.exec()
+        self.tts_speed.setValue(lab.speed.value())
 
     def _wake_box(self):
         box = QGroupBox(t("Waking it by voice"))
@@ -2292,3 +2289,206 @@ class WakeRecorder(QDialog):
     def reject(self):
         self.enroller.stop()
         super().reject()
+
+
+SAMPLE_SPEECH = """Tamam, hallettim. Perşembe saat üçe **toplantı** eklendi.
+
+```python
+print("bu okunmayacak")
+```
+
+Ayrıntılar https://takvim.example.com/abc adresinde. Başka bir şey var mı?"""
+
+
+class VoiceLab(QDialog):
+    """A place to hear the voice, and to see what it does before it speaks.
+
+    The voice is the one part of Dikte with no visible workings: text goes in,
+    sound comes out, and when the sound is wrong there is nothing to look at.
+    So this shows the two steps in between. What is *said* is not what is
+    written — a code block, a link and the punctuation that makes a heading are
+    taken off first, because read literally they are noise — and it is said one
+    sentence at a time rather than all at once, which is what lets a long answer
+    start before it has finished being made.
+
+    Both of those are visible here as they happen, with the time each sentence
+    took to make against the time it lasts. That ratio is the number that says
+    whether the machine can keep ahead of its own speech, and it is the only
+    thing that decides whether an answer sounds immediate or arrives in pieces.
+    """
+
+    def __init__(self, conf, data_dir, parent=None):
+        super().__init__(parent)
+        self.conf = conf
+        self.data_dir = data_dir
+        self.setWindowTitle(t("Try the voice"))
+        self.resize(660, 620)
+
+        layout = QVBoxLayout(self)
+        self.status = QLabel("")
+        self.status.setWordWrap(True)
+        layout.addWidget(self.status)
+
+        layout.addWidget(QLabel(t("Write anything, or leave the example:")))
+        self.text = QPlainTextEdit(SAMPLE_SPEECH)
+        self.text.setMinimumHeight(120)
+        self.text.textChanged.connect(self._refresh_plan)
+        layout.addWidget(self.text)
+
+        self.plan_label = QLabel("")
+        self.plan_label.setWordWrap(True)
+        layout.addWidget(self.plan_label)
+        self.plan = QListWidget()
+        self.plan.setMaximumHeight(120)
+        self.plan.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        layout.addWidget(self.plan)
+
+        row = QHBoxLayout()
+        row.addWidget(QLabel(t("Speed")))
+        self.speed = QSpinBox()
+        self.speed.setRange(50, 200)
+        self.speed.setSingleStep(5)
+        self.speed.setSuffix(" %")
+        self.speed.setValue(int(round(float(conf["tts_speed"] or 1.0) * 100)))
+        row.addWidget(self.speed)
+        row.addStretch(1)
+        self.say_button = QPushButton(t("Say it"))
+        self.say_button.clicked.connect(self._say)
+        row.addWidget(self.say_button)
+        self.stop_button = QPushButton(t("Stop"))
+        self.stop_button.clicked.connect(self._stop)
+        self.stop_button.setEnabled(False)
+        row.addWidget(self.stop_button)
+        layout.addLayout(row)
+
+        layout.addWidget(QLabel(t("What happened:")))
+        self.log = QListWidget()
+        layout.addWidget(self.log)
+
+        close = QPushButton(t("Close"))
+        close.clicked.connect(self.accept)
+        closing = QHBoxLayout()
+        closing.addStretch(1)
+        closing.addWidget(close)
+        layout.addLayout(closing)
+
+        # Its own voice, on a copy of the settings, so trying a speed here does
+        # not change what the assistant answers with until Save is pressed.
+        self._conf = dict(conf.data) if hasattr(conf, "data") else dict(conf)
+        self._conf["tts_enabled"] = True
+        self.voice = tts.Voice(_Plain(self._conf), data_dir, parent=self)
+        self.voice.spoke.connect(self._on_spoke)
+        self.voice.finished.connect(self._on_finished)
+        self.voice.failed.connect(self._on_failed)
+        self._spoken = 0
+        self._made = []
+        self._refresh_status()
+        self._refresh_plan()
+
+    # ---- what it will do --------------------------------------------------
+
+    def _refresh_status(self):
+        binary = tts.binary_path(self.conf["tts_binary"])
+        voice = tts.voice_path(self.data_dir, self.conf["tts_voice"])
+        if not binary or not voice:
+            self.status.setText(t(
+                "Piper was not found. Put piper.exe on PATH, or in "
+                "%LOCALAPPDATA%" + chr(92) + "Programs" + chr(92) + "piper."
+            ) if not binary else t(
+                "No voice file. Put {name} in {folder}.",
+                name=tts.VOICE, folder=tts.voices_dir(self.data_dir)))
+            self.say_button.setEnabled(False)
+            return
+        self.status.setText(t(
+            "Speaking with {voice}, through {piper}.",
+            voice=os.path.basename(voice), piper=binary))
+
+    def _refresh_plan(self):
+        """The sentences it would actually say, as the text is typed."""
+        written = self.text.toPlainText()
+        parts = tts.sentences(written)
+        self.plan.clear()
+        for index, part in enumerate(parts, start=1):
+            self.plan.addItem(f"{index}.  {part}")
+        removed = len(tts.speakable(written)) < len(written.strip())
+        self.plan_label.setText(t(
+            "It will say this, in {count} pieces — one at a time, so a long "
+            "answer starts before the rest of it has been made.{trimmed}",
+            count=len(parts),
+            trimmed=t("  Code, links and markdown have been taken off.")
+            if removed else "",
+        ))
+
+    # ---- doing it ----------------------------------------------------------
+
+    def _say(self):
+        self.log.clear()
+        self._spoken = 0
+        self._made = []
+        self._conf["tts_speed"] = self.speed.value() / 100.0
+        if not self.voice.say(self.text.toPlainText()):
+            self.log.addItem(t("Nothing to say."))
+            return
+        self.say_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
+
+    def _stop(self):
+        self.voice.stop()
+        self.log.addItem(t("Stopped."))
+        self._on_finished()
+
+    def _on_spoke(self, sentence, made, lasts):
+        self._spoken += 1
+        self._made.append((made, lasts))
+        ratio = (lasts / made) if made > 0 else 0.0
+        self.log.addItem(t(
+            "{index}.  made in {made:.2f} s, lasts {lasts:.1f} s "
+            "({ratio:.0f}× real time)  ·  {sentence}",
+            index=self._spoken, made=made, lasts=lasts, ratio=ratio,
+            sentence=sentence[:44],
+        ))
+        self.log.scrollToBottom()
+
+    def _on_finished(self):
+        self.say_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        # The first line is always the slow one, and saying so is the
+        # difference between a number that looks broken and one that
+        # explains itself: it carries the voice being loaded, which happens
+        # once and not again.
+        if len(self._made) < 2:
+            return
+        rest = self._made[1:]
+        made = sum(m for m, _ in rest)
+        lasts = sum(l for _, l in rest)
+        self.log.addItem(t(
+            "The first line carries loading the voice, which happens once. "
+            "After that: {ratio:.0f}× real time.",
+            ratio=(lasts / made) if made else 0.0))
+        self.log.scrollToBottom()
+
+    def _on_failed(self, _message):
+        self.log.addItem(t("It could not be said. Check the two paths above."))
+        self._on_finished()
+
+    def reject(self):
+        self.voice.stop()
+        super().reject()
+
+    def accept(self):
+        self.voice.stop()
+        super().accept()
+
+
+class _Plain:
+    """A settings object backed by a plain dict, for trying things without
+    touching what is saved."""
+
+    def __init__(self, data):
+        self.data = data
+
+    def __getitem__(self, key):
+        return self.data.get(key)
+
+    def __setitem__(self, key, value):
+        self.data[key] = value

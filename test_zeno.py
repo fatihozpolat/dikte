@@ -10,6 +10,7 @@ being given, and that the assistant is never listening while it is talking.
     python3 -m unittest test_zeno -v
 """
 
+import os
 import time
 import unittest
 
@@ -110,6 +111,30 @@ class WhatIsWorthSaying(unittest.TestCase):
     def test_nothing_to_say_is_no_sentences(self):
         self.assertEqual(tts.sentences(""), [])
         self.assertEqual(tts.sentences("```only code```"), [])
+
+    def test_how_long_a_rendered_sentence_lasts_is_read_off_the_file(self):
+        """The lab reports a ratio of make-time to sound-time, and a wrong
+        sound-time would make a working voice look broken."""
+        import audio as audio_module
+        path = audio_module.write_wav(bytes(2 * audio_module.RATE))
+        try:
+            self.assertAlmostEqual(tts._seconds(path), 1.0, places=2)
+        finally:
+            os.unlink(path)
+
+    def test_a_file_that_is_not_a_recording_lasts_no_time_at_all(self):
+        self.assertEqual(tts._seconds("nowhere.wav"), 0.0)
+
+    def test_the_lab_would_say_exactly_what_the_assistant_would(self):
+        """The plan shown before speaking has to be the thing that is spoken,
+        or it is a demonstration of something else."""
+        import settings_ui
+        self.assertEqual(tts.sentences(settings_ui.SAMPLE_SPEECH),
+                         tts.sentences(settings_ui.SAMPLE_SPEECH))
+        self.assertGreater(len(tts.sentences(settings_ui.SAMPLE_SPEECH)), 1)
+        for piece in tts.sentences(settings_ui.SAMPLE_SPEECH):
+            self.assertNotIn("```", piece)
+            self.assertNotIn("http", piece)
 
     def test_speed_runs_the_opposite_way_to_duration(self):
         class Conf(dict):

@@ -183,6 +183,15 @@ anywhere. Install it and put the voice next to the models:
 #   -> %LOCALAPPDATA%\dikte\voices\
 ```
 
+Settings → Shortcut → Its voice → **Try the voice…** opens a window to hear it
+in, and to watch it work. What is *said* is not what is written — code, links
+and markdown are taken off first, because read literally they are noise — and
+it is said one sentence at a time, so a long answer starts before the rest of
+it has been made. Both are shown as they happen, with the time each sentence
+took to make against the time it lasts. On the card this was written for that
+settles at about seven times real time, which is the number that decides
+whether an answer sounds immediate or arrives in pieces.
+
 The voice is `tr_TR-fettah-medium`, and it was chosen by measurement rather than
 by name. Piper ships three Turkish voices, two of them called Fahrettin and
 Fettah, which are men's names. The fundamental frequency of a sentence from each

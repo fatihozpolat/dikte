@@ -23,12 +23,15 @@ be told to stop listening while this is talking, or the assistant hears itself
 say its own name.
 """
 
+import contextlib
 import os
 import re
 import shutil
 import subprocess
 import tempfile
 import threading
+import time
+import wave
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
@@ -127,6 +130,10 @@ class Voice(QObject):
     started = pyqtSignal()
     finished = pyqtSignal()
     failed = pyqtSignal(str)
+    # One sentence done: what was said, how long it took to make, and how
+    # long the sound of it lasts. Nothing needs this to speak; it is what
+    # lets a person watch the thing work instead of taking it on trust.
+    spoke = pyqtSignal(str, float, float)
 
     def __init__(self, conf, data_dir, parent=None):
         super().__init__(parent)
@@ -191,11 +198,14 @@ class Voice(QObject):
                     if run != self._run or not self._queue:
                         break
                     sentence = self._queue.pop(0)
+                began = time.monotonic()
                 path = self._render(sentence, run)
                 if path is None:
                     break
+                made = time.monotonic() - began
                 try:
                     if run == self._run:
+                        self.spoke.emit(sentence, made, _seconds(path))
                         _play(path)
                 finally:
                     try:
@@ -257,6 +267,15 @@ class Voice(QObject):
 
 class _Cancelled(Exception):
     pass
+
+
+def _seconds(path):
+    """How long a rendered WAV lasts, for the sake of saying so."""
+    try:
+        with contextlib.closing(wave.open(path)) as handle:
+            return handle.getnframes() / float(handle.getframerate())
+    except (OSError, wave.Error, ZeroDivisionError):
+        return 0.0
 
 
 # --- getting the sound out ------------------------------------------------

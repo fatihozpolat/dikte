@@ -712,6 +712,32 @@ TR = {
     "Off, the answer only appears in a bubble beside the character.":
         "Kapalıyken cevap yalnızca karakterin yanındaki balonda görünür.",
     "Speed": "Hız",
+    "Close": "Kapat",
+    "Try the voice…": "Sesi dene…",
+    "Try the voice": "Sesi dene",
+    "Speaking with {voice}, through {piper}.":
+        "{voice} sesiyle, {piper} üzerinden konuşuyor.",
+    "Write anything, or leave the example:":
+        "İstediğini yaz, ya da örneği olduğu gibi bırak:",
+    "It will say this, in {count} pieces — one at a time, so a long answer "
+    "starts before the rest of it has been made.{trimmed}":
+        "Şunu söyleyecek, {count} parça hâlinde — teker teker, böylece uzun bir "
+        "cevap gerisi hazırlanmadan önce başlar.{trimmed}",
+    "  Code, links and markdown have been taken off.":
+        "  Kod, bağlantılar ve markdown çıkarıldı.",
+    "What happened:": "Ne oldu:",
+    "Say it": "Söyle",
+    "Stop": "Durdur",
+    "Nothing to say.": "Söylenecek bir şey yok.",
+    "{index}.  made in {made:.2f} s, lasts {lasts:.1f} s ({ratio:.0f}× real "
+    "time)  ·  {sentence}":
+        "{index}.  {made:.2f} sn'de üretildi, {lasts:.1f} sn sürüyor "
+        "({ratio:.0f}× gerçek zaman)  ·  {sentence}",
+    "It could not be said. Check the two paths above.":
+        "Söylenemedi. Yukarıdaki iki yolu kontrol et.",
+
+    "The first line carries loading the voice, which happens once. After that: {ratio:.0f}× real time.":
+        "İlk satır sesin yüklenmesini de taşır, o da bir kez olur. Sonrası: {ratio:.0f}× gerçek zaman.",
     "Hear it": "Dinle",
     "Ready: {voice}": "Hazır: {voice}",
     "Piper was not found. Put piper.exe on PATH, or in "

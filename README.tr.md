@@ -181,6 +181,14 @@ hiçbir yere bir şey gönderilmez. Kurmak için:
 #   -> %LOCALAPPDATA%\dikte\voices\
 ```
 
+Ayarlar → Kısayol → Sesi → **Sesi dene…** hem dinlemek hem çalışmasını görmek
+için bir pencere açar. **Söylenen**, yazılan değildir — kod, bağlantı ve markdown
+önce çıkarılır, çünkü harfi harfine okununca gürültüdürler — ve metin teker teker
+cümle olarak söylenir, böylece uzun bir cevap gerisi hazırlanmadan başlar.
+İkisi de olurken görünür; her cümlenin üretim süresi ile süresi yan yana yazılır.
+Bu yazının yazıldığı kartta bu oran yaklaşık yedi kat gerçek zamanda oturuyor; bir
+cevabın anında mı yoksa parça parça mı geldiğine karar veren sayı da bu.
+
 Ses `tr_TR-fettah-medium` ve adına bakılarak değil, ölçülerek seçildi. Piper'ın
 üç Türkçe sesinden ikisinin adı Fahrettin ve Fettah, yani erkek adı. Her birinin
 söylediği bir cümlenin temel frekansı başka şey söylüyor: dfki ve fahrettin 103
