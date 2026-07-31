@@ -425,25 +425,6 @@ DEFAULTS = {
     "companion_live": True,
     "companion_replaces_overlay": True,
 
-    # --- its voice --------------------------------------------------------
-    # Piper, with the one Turkish voice of the three that measured female:
-    # fettah sits at 190 Hz, dfki and fahrettin at 103 and 102.
-    "tts_enabled": True,
-    "tts_binary": "",               # empty -> piper from PATH or the usual place
-    "tts_voice": "",                # empty -> the default voice in the data dir
-    "tts_speed": 1.0,
-    # How much lighter than recorded to make the voice. Raising the sample
-    # rate moves pitch and formants together, which is what a shorter vocal
-    # tract does, and the sentence is generated proportionally longer so the
-    # duration comes out unchanged. Measured: 1.0 gives 193 Hz, 1.10 gives
-    # 214 Hz, which is a lighter and younger voice rather than a faster one.
-    "tts_pitch": 1.10,
-
-    # --- being spoken to --------------------------------------------------
-    # Openings that mean the words themselves are wanted, on top of the ones
-    # router.py already knows. One per line.
-    "dictation_openings": "",
-
     "keep_audio": False,
     "history_limit": 200,
     "file_timestamps": False,
@@ -636,21 +617,15 @@ class Config:
             prompt += SPEAKER_RULE_TR if turkish else SPEAKER_RULE_EN
         return prompt
 
-    def assistant_prompt(self, spoken=False):
-        """What the agent is told, on top of whatever it is configured with.
+    def assistant_prompt(self):
+        """What the agent is told about itself, before the question.
 
-        `spoken` adds the rules that only apply when the answer is going to be
-        read out. Without them a model writes for a screen — headings, bullets,
-        a code block, a link — and every one of those is either noise when
-        spoken or a silence where something should have been.
+        There used to be a second version of this for when the answer was going
+        to be read out loud — no headings, no bullets, no code. The voice is
+        gone and so is that: everything the agent says is now read, and markdown
+        is how it should look.
         """
-        prompt = self["assistant_prompt"].strip() or default_assistant_prompt()
-        if spoken:
-            prompt += (SPOKEN_RULE_TR if i18n.language() == "tr"
-                       else SPOKEN_RULE_EN)
-        return prompt
-
-    # ---- meetings --------------------------------------------------------
+        return self["assistant_prompt"] or default_assistant_prompt()
 
     def participants(self):
         """The names in the meeting, one per line, ready to paste into a prompt."""

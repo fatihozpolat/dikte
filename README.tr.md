@@ -88,97 +88,103 @@ tutanağı ise düşünmeye bırakıyor.
 | Ne | Nasıl |
 | --- | --- |
 | Kaydı başlat / bitir | `Ctrl+Space`, ya da tepsi simgesine tıkla |
-| Söylediğimi yaz | kontrolün sol yarısı, ya da kısayolu |
-| Ajana yaptır | kontrolün sağ yarısı |
+| Söylediğimi yaz | kalem, ya da kısayolu |
+| Ajana yaptır | kıvılcım |
+| Söylenenleri ve cevapları oku | balonlar, ya da tepsi menüsü → *Geçmiş…* |
+| Kaydı bitir | herhangi bir loba tekrar bas |
 | Zeno'yla konuş | kısayolu, tepsi menüsü → *Zeno'yla konuş*, ya da `dikte zeno` |
-| Konuşmasını kes | küreye tıkla |
 | Kaydı iptal et | Tepsi menüsü → *Kaydı iptal et*, ya da `dikte cancel` |
-| Ajana sesle komut ver | Tepsi menüsü → *Claude'a sor*, ya da `dikte ask` |
-| Toplantıyı başlat / bitir | Tepsi menüsü → *Toplantı kaydet*, ya da `dikte meeting` |
+| Ajana sesli komut ver | Tepsi menüsü → *Claude'a sor*, ya da `dikte ask` |
+| Toplantı başlat / bitir | Tepsi menüsü → *Toplantı kaydet*, ya da `dikte meeting` |
 | Ayarlar | Tepsi menüsü → *Ayarlar*, ya da `dikte settings` |
-| Güncelleme sonrası yeniden yükle | Tepsi menüsü → *Yeniden başlat*, ya da `dikte restart` |
+| Güncellemeden sonra yenile | Tepsi menüsü → *Yeniden başlat*, ya da `dikte restart` |
 | Çık | Tepsi menüsü → *Çık*, ya da `dikte quit` |
 
-Ekranın kenarında iki yarımlı küçük bir kontrol var. Soldaki **yazar**:
-söylediğin şey temizlenip imlecin olduğu yere konur. Sağdaki **sorar**:
-söylediğin şey ajana gider ve cevap sesli döner. Modlu tek düğme değil, iki
-düğme; çünkü modda yanılmak, ajana gönderilmiş bir not ya da belgeye yazılmış
-bir soru demektir — iki lob birkaç piksele mal olur ve soruyu ortadan kaldırır.
+Ekranın kenarında, üç loblu küçük bir kontrol duruyor. Kalem **yazar**:
+söylediğin şey temizlenip imlecin olduğu yere konur. Kıvılcım **sorar**:
+söylediğin şey ajana gider ve cevap yazılı döner. Balonlar **geçmişi** açar —
+diğer ikisinin yaptığı her şey, tastamam, okuyup kopyalayabileceğin bir konuşma
+olarak.
 
-Duyduğu şey ekranın ortasında, sesinle dalgalanan yeşil bir şeridin üstünde
-görünür: cümle *sen daha söylerken*, sonra onunla ne yapıldığı. Şerit yazının
-arkasında ve soluk, çünkü tersi okunmayan yazılı bir dalga formu olurdu; bandın
-kendi zemini var, çünkü birinin duvar kâğıdı üstündeki beyaz yazı ölçüldü ve
-okunmuyordu. Okunacak metnin uzunluğuna göre üç ile otuz saniye arasında kalır.
-Kontrolü kenar boyunca sürükleyebilirsin; durdurmak için yarımlardan birine
-tekrar bas. Ayarlar → Karakter altında; kapattığında her şey eski haline döner.
+İlk ikisi modlu tek bir düğme değil, ayrı düğmeler; çünkü modda yanılmak, ajana
+gönderilmiş bir not ya da belgeye yazılmış bir soru demektir. Bir lob birkaç
+piksel tutar ve soruyu ortadan kaldırır.
 
-Arkasında, ekranın köşesindeki gösterge kırmızı kayıt noktasını, canlı ses
-dalgasını ve süreyi, ardından hangi aşamada olduğunu gösterir — karakter
-açıkken o şerit susar, çünkü aynı dikteyi ekranın iki ucundan birden bildiren
-iki şey bir fazladır. Odak almaz. Dikte çalışırken
-`Ctrl+Space`'e tekrar basmak bir şey yapmaz, sıraya da girmez. Dikte ile ajana
-verilen komut yalnızca mikrofon için birbirini bekler, o da tek aygıt olduğu
-için; başka hiçbir şeyde beklemezler. Her birinin kendi göstergesi var, ikisi
-birden ekrandayken ikincisi birincinin üstüne yerleşir.
+Bas, konuş, bas: kaydı bitiren şey ikinci basıştır, sesinin kesilmesini bekleyen
+bir şey yok. Duyduğu şey kontrolün yanındaki balonlarda görünür — cümle *sen
+hâlâ söylerken*, sonra onunla ne yapıldığı — her biri okunacak metnin
+uzunluğundan hesaplanarak üç ile otuz saniye arası kalır. Ekranın ortası, sesle
+dalgalanan bir şeridin üstünde denendi ve orası yanlış yer: dikte ettiğin her
+cümlede beliren bir şeyin, üstünde çalıştığın şeyin ortasında işi yoktur. Akan
+bir yorumun yeri kenardır. Kontrolü o kenar boyunca istediğin yere
+sürükleyebilirsin. Ayarlar → Karakter altında; kapatmak her şeyi eski hâline
+döndürür.
+
+Arkasında, ekranın köşesindeki gösterge kırmızı bir nokta, canlı bir dalga
+biçimi ve geçen süreyi, sonra hangi aşamada olduğunu gösterir — karakter
+açıkken o köşe şeridi susar, çünkü aynı dikteyi karşılıklı iki köşeden bildiren
+iki şey bir fazladır. Hiçbir zaman odağı almaz. Dikte çalışırken `Ctrl+Space`'e
+tekrar basmak bir şey yapmaz; sıraya bir şey girmez. Dikte ile ajana verilen
+komut mikrofon için birbirini bekler, çünkü mikrofon tek bir aygıttır; başka
+hiçbir şey için beklemezler: her birinin kendi göstergesi vardır ve ikisi
+birden açıkken ikincisi birincinin üstüne yığılır.
 
 ## Onunla konuşmak
 
-Kısayoluna bas ya da tepsi menüsünden **Zeno'yla konuş**'u seç ve ne istediğini
-söyle. Sen susana kadar dinler, iki şeyden hangisini kastettiğini kendisi çözer:
+Bir loba bas, ne istediğini söyle, tekrar bas.
 
-| Ne dersin | Ne olur |
-| --- | --- |
-| "Zeno" … "yaz, bugün üç karar aldık" | cümle temizlenip imlecin olduğu yere yapıştırılır |
-| "Zeno" … "takvime perşembe üçe toplantı ekle" | Claude yapar ve ne yaptığını söyler |
+**Bas, konuş, bas.** İlk basış mikrofonu açar ve açık tutar; ikincisi kapatır.
+Sesinin kesilmesini bekleyen bir şey yok. Sessizliğe bakarak kaydı bitirme önce
+yazıldı, sonra çıkarıldı: insan kelime ararken duraklar, kayıt cümlenin
+ortasında biter ve kesilen kısım tam da önemsediğin kısımdır — üstelik
+vantilatörü olan bir oda hiç sessizleşmez. Bir cümlenin ne zaman bittiğini
+parmak bilir, başka bir şey bilmez.
 
-Kararı başlangıç verir. "Yaz", "not al", "metne dök", "write this down" ve
-benzerleri sözcüklerin kendisini istediğin anlamına gelir; gerisi ajana gider.
-Yalnızca başlangıca bakılır — "sonra sana yazarım" cümlesini panondan uzak tutan
-şey de bu. Liste Ayarlar → Kısayol altında, ekleme yapabilirsin.
+Hangi loba bastığın, ne demek istediğini anlamasının tamamıdır:
 
-Cevap hem sesli söylenir hem balonda görünür. Sesi kapatırsan yalnızca balon
-kalır. Açıkken ajana, okunmak yerine dinlendiği söylenir; o da başlık ve madde
-işaretleriyle değil, tek cümleyle cevap verir.
+| Neye basarsın | Ne söylersin | Ne olur |
+| --- | --- | --- |
+| kalem | "bugün üç karar aldık" | cümle temizlenip imlecin olduğu yere yapıştırılır |
+| kıvılcım | "takvime perşembe üçe toplantı ekle" | Claude yapar ve ne yaptığını yazar |
+| balonlar | — | geçmişi açar |
 
-Konuşurken ya da çalışırken küreye tıklamak onu keser. Kısayolu Ayarlar → Kısayol
-altında; `dikte zeno` de aynı şeyi terminalden yapar.
+Sözcüklerden hiçbir şey okunmuyor, bu bilerek böyle. Dikte eskiden açılışa
+bakardı — "yaz", "not al", "metne dök" sözcüklerin kendisini istediğin anlamına
+gelir, gerisi ajana giderdi. Tek düğmeyle onları ayırmanın başka yolu yoktu; üç
+lobla bu bir tuzak, çünkü "yaz bana bir e-posta taslağı" bir asistana
+söylediğin bir şeydir ve cevaplanmak yerine belgene yapıştırılırdı. Buradaki
+tahminin yaptığı hata geri alınamaz, o yüzden hiçbir şey tahmin etmiyor.
 
-### Sesi
+Çalışırken basmak işi iptal eder — hangi lob olursa olsun, çünkü bir şeyi
+durdurmak için düğmenin doğru parçasını aramak, durdurma yolunun hiç olmaması
+kadar kötü olurdu. Kimsenin durdurmadığı bir kayıt, açık bırakılmak yerine beş
+dakika sonra kapatılır ve söylenen korunur. Kısayol Ayarlar → Kısayol altında;
+`dikte zeno` da terminalden aynısını yapar.
 
-Piper — whisper.cpp ve ffmpeg'in yanında duran, sesi bir dosyada olan bir
-program. Dikte'ye hiçbir şey aktarılmaz, çalışırken hiçbir şey indirilmez,
-hiçbir yere bir şey gönderilmez. Kurmak için:
+### Geçmiş
 
-```powershell
-# piper.exe: https://github.com/rhasspy/piper/releases
-#   -> %LOCALAPPDATA%\Programs\piper\
-# tr_TR-fettah-medium.onnx ve .onnx.json:
-#   https://huggingface.co/rhasspy/piper-voices/tree/main/tr/tr_TR
-#   -> %LOCALAPPDATA%\dikte\voices\
-```
+Üçüncü lob onu açar: diğer iki lobun yaptığı her şey, eskiden yeniye, bir
+konuşma olarak. Bir yanda isteğin, diğer yanda cevap — markdown olarak işlenmiş
+hâlde; başlıklar, listeler, tablolar ve kod blokları yazıldığı gibi çıkar. Her
+cevabın üstünde **Kopyala**, pencerenin altında **Tümünü markdown olarak
+kopyala** var; bir cevapta geniş bir tablo varsa pencere genişletilebilir.
 
-Ayarlar → Kısayol → Sesi → **Sesi dene…** hem dinlemek hem çalışmasını görmek
-için bir pencere açar. **Söylenen**, yazılan değildir — kod, bağlantı ve markdown
-önce çıkarılır, çünkü harfi harfine okununca gürültüdürler — ve metin teker teker
-cümle olarak söylenir, böylece uzun bir cevap gerisi hazırlanmadan başlar.
-İkisi de olurken görünür; her cümlenin üretim süresi ile süresi yan yana yazılır.
-Bu yazının yazıldığı kartta bu oran yaklaşık yedi kat gerçek zamanda oturuyor; bir
-cevabın anında mı yoksa parça parça mı geldiğine karar veren sayı da bu.
+Bir ipucu balonu değil de pencere olmasının sebebi içindekiler. Bir ajanın
+cevabı bir durum satırı değildir: paragraflardır ve zaten istediğin şeydir.
+Eskiden on bir saniye sonra solan bir balonda görünüyordu, o balon ona yanlış
+bir biçimdi.
 
-Varsayılan olarak perdesi onda bir yükseltilmiş durumda; bu onu inceltiyor ve
-gençleştiriyor. Hızlandırarak değil: cümle orantılı olarak daha uzun üretiliyor ve
-örnekleme hızı ona göre yükseltiliyor, böylece perde ile formantlar birlikte
-hareket ediyor — kısa bir ses yolu tam olarak budur — ve süre değişmiyor. Hiçbir
-şey yeniden örneklenmiyor, hiçbir şey esnetilmiyor; duyulacak bir bozulma da yok,
-yalnızca başlıktaki sayı değişti. Ölçüldü: %100 ile 195 Hz, %110 ile 213 Hz.
-Kadran aynı pencerede, hızın yanında.
+Kontrolün yanındaki balonlar duruyor ve hâlâ soluyorlar — onlar bakış, kayıt
+değil. Ne olup bittiği, göz ucuyla, birkaç saniyede geçen. Balon gidince bir şey
+kaybolmuyor; hepsi üçüncü lobun ardında. Panel çalıştırmalar arasında saklanır,
+kayıtların yanındaki `history.jsonl` dosyasında.
 
-Ses `tr_TR-fettah-medium` ve adına bakılarak değil, ölçülerek seçildi. Piper'ın
-üç Türkçe sesinden ikisinin adı Fahrettin ve Fettah, yani erkek adı. Her birinin
-söylediği bir cümlenin temel frekansı başka şey söylüyor: dfki ve fahrettin 103
-ve 102 Hz'de, fettah ise 166 Hz'in altına hiç inmeden 190 Hz'de. Adlara bakmak
-erkek bir ses seçtirirdi.
+**Konuşma yok.** Vardı: Piper, adlarına bakılarak değil üçünün de temel
+frekansı ölçülerek seçilmiş bir Türkçe ses, ve onu dinlemek için bir pencere.
+Üçüncü lobla birlikte çıkarıldı. Değerli bir cevap iki kez okunabilmeyi hak
+eder, sesli olansa bittiği anda gitmiştir. Ajanın söylediği her şey artık yazılı
+geliyor; düz cümlelerle cevap vermesinin söylenmemesinin sebebi de bu: okunacak
+bir cevabın görünmesi gereken biçim markdown.
 
 ## Neler yapıyor
 
@@ -296,10 +302,11 @@ uygulamanın zaten tuttuğu bir kombinasyon hiç alınamaz. Öyle bir durumda Ay
 ```
 dikte.py          giriş noktası, tepsi simgesi, durum makinesi, IPC
 plat.py           iki platformun farklı yaptığı şeyler, tek yerde
-companion.py      iki loblu kontrol ve ekranın ortasındaki bant
-conversation.py   dinlemesi istenmesinden cevabı vermesine kadarki döngü
-router.py         sözcükler mi isteniyordu, onlarla bir şey yapılması mı
-tts.py            cevabı sesli söyleme, Piper üzerinden
+companion.py      üç loblu kontrol ve yanındaki balonlar
+chat.py           geçmişi bir konuşma olarak gösterme, markdown cevaplarla
+history.py        ne sorulduğu ve ne döndüğü, çalıştırmalar arasında saklı
+theme.py          tek palet, tek biçim kümesi, tek stil sayfası
+conversation.py   ilk basıştan cevaba kadarki döngü
 live.py           o ana kadarki sesi, konuşma sürerken yeniden okuma
 audio.py          PCM kaydı: pw-record ya da ffmpeg, ve aygıt listeleri
 meeting.py        kanal ayırma, konuşmacı etiketi, temizleme, tutanak

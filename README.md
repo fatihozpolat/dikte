@@ -87,10 +87,11 @@ which are worth thinking about, to think.
 | What | How |
 | --- | --- |
 | Start / stop recording | `Ctrl+Space`, or click the tray icon |
-| Write what I say | the left half of the control, or its shortcut |
-| Have the agent do it | the right half of the control |
+| Write what I say | the pen, or its shortcut |
+| Have the agent do it | the spark |
+| Read what was said and answered | the bubbles, or Tray menu → *History…* |
+| Stop the recording | press any lobe again |
 | Talk to Zeno | its shortcut, tray menu → *Talk to Zeno*, or `dikte zeno` |
-| Stop it talking | click the sphere |
 | Cancel a recording | Tray menu → *Cancel recording*, or `dikte cancel` |
 | Speak a command to an agent | Tray menu → *Ask Claude*, or `dikte ask` |
 | Start / end a meeting | Tray menu → *Record a meeting*, or `dikte meeting` |
@@ -98,22 +99,26 @@ which are worth thinking about, to think.
 | Reload after an update | Tray menu → *Restart*, or `dikte restart` |
 | Quit | Tray menu → *Quit*, or `dikte quit` |
 
-A small control sits on the edge of the screen, with two halves. The left one
-**writes**: what you say is tidied and put where the cursor is. The right one
-**asks**: what you say goes to the agent and the answer comes back spoken. Two
-buttons rather than one with a mode, because being wrong about a mode means a
-note sent to an agent or a question typed into a document — two lobes cost a few
-pixels and remove the question.
+A small control sits on the edge of the screen, with three lobes. The pen
+**writes**: what you say is tidied and put where the cursor is. The spark
+**asks**: what you say goes to the agent and the answer comes back in writing.
+The bubbles open the **history** — everything either of the other two has done,
+in full, as a conversation you can read and copy out of.
 
-What it hears appears across the middle of the screen, over a green ribbon that
-moves with your voice: the sentence *as you are still saying it*, then what was
-done with it. The ribbon is behind the words and dim, because the other way
-round is a waveform with unreadable text on it, and the band has a plate of its
-own, because white paint on somebody's wallpaper was measured unreadable. It
-stays between three and thirty seconds, worked out from how much there is to
-read. Drag the control anywhere along the edge; press either half again to stop.
-It is under Settings → Character, and turning it off puts everything back the way
-it was.
+The first two are separate buttons rather than one with a mode, because being
+wrong about a mode means a note sent to an agent or a question typed into a
+document. A lobe costs a few pixels and removes the question.
+
+Press, talk, press: the second press is what ends a recording, and nothing is
+listening for you to go quiet. What it hears appears in bubbles beside the
+control — the sentence *as you are still saying it*, then what was done with it
+— each staying between three and thirty seconds, worked out from how much there
+is to read. Across the middle of the screen was tried, over a ribbon that moved
+with the voice, and it is the wrong place: something that appears for every
+sentence you dictate has no business in the middle of what you are working on.
+An edge is where a running commentary belongs. Drag the control anywhere along
+that edge. It is under Settings → Character, and turning it off puts everything
+back the way it was.
 
 Behind it, an indicator in the screen corner shows a red dot, a live waveform and the
 elapsed time, then the stage it is on — while the character is on that corner
@@ -126,64 +131,63 @@ second one stacks above the first while both are up.
 
 ## Talking to it
 
-Press its shortcut, or pick **Talk to Zeno** from the tray, and say what you
-want. It listens until you stop talking and works out which of two things you
-meant:
+Press a lobe, say what you want, and press again.
 
-| What you say | What happens |
-| --- | --- |
-| "Zeno" … "yaz, bugün üç karar aldık" | the sentence is tidied and pasted at the cursor |
-| "Zeno" … "takvime perşembe üçe toplantı ekle" | Claude does it, and says what it did |
+**Press, talk, press.** The first press opens the microphone and it stays open;
+the second closes it. Nothing is listening for you to go quiet. Ending a
+recording by waiting for silence was built first and taken out: a person hunting
+for a word pauses, the recording ends mid-sentence, and the half that was cut is
+the half you cared about — while a room with a fan in it never falls quiet at
+all. A finger knows when a sentence has finished and nothing else does.
 
-The opening decides. "Yaz", "not al", "metne dök", "write this down" and their
-neighbours mean you want the words themselves; everything else goes to the
-agent. Only the opening is looked at, which is what keeps "sonra sana yazarım"
-out of your clipboard. The list is in Settings → Shortcut and can be added to.
+Which lobe you pressed is the whole of how it knows what you meant:
 
-The answer is spoken, and also appears in a bubble. Turn the voice off and only
-the bubble is left. When it is on, the agent is told it is being listened to
-rather than read, so it answers in a sentence instead of in headings and bullet
-points.
+| What you press | What you say | What happens |
+| --- | --- | --- |
+| the pen | "bugün üç karar aldık" | the sentence is tidied and pasted at the cursor |
+| the spark | "takvime perşembe üçe toplantı ekle" | Claude does it, and writes back what it did |
+| the bubbles | — | opens the history |
 
-Clicking the sphere while it is talking or working calls it off. The shortcut
-is under Settings → Shortcut; `dikte zeno` does the same thing from a terminal.
+Nothing is read out of the words, and that is deliberate. Dikte used to look at
+the opening — "yaz", "not al", "metne dök" meant you wanted the words themselves
+and everything else went to the agent. With one button that was the only way to
+tell them apart; with three it is a trap, because "yaz bana bir e-posta taslağı"
+is a thing you say *to* an assistant and would have been pasted into your
+document instead of answered. The mistake a guess makes here cannot be taken
+back, so nothing guesses.
 
-### Its voice
+Pressing while it is working calls it off — any lobe will do it, because hunting
+for the right part of a button to stop something with would be nearly as bad as
+having no way to stop it. A recording nobody ever stops is closed after five
+minutes rather than left running, and what was said is kept. The shortcut is
+under Settings → Shortcut; `dikte zeno` does the same from a terminal.
 
-Piper, standing next to whisper.cpp and ffmpeg: a program with a voice in a
-file, nothing imported into Dikte, nothing downloaded at run time, nothing sent
-anywhere. Install it and put the voice next to the models:
+### The history
 
-```powershell
-# piper.exe from https://github.com/rhasspy/piper/releases
-#   -> %LOCALAPPDATA%\Programs\piper\
-# tr_TR-fettah-medium.onnx and .onnx.json from
-#   https://huggingface.co/rhasspy/piper-voices/tree/main/tr/tr_TR
-#   -> %LOCALAPPDATA%\dikte\voices\
-```
+The third lobe opens it: everything either of the other two has done, oldest
+first, as a conversation. Your request on one side, the answer on the other,
+rendered as markdown — headings, lists, tables and fenced code all come out as
+they were written. There is a **Copy** on every answer and a **Copy all as
+markdown** at the foot of the window, and it can be widened when an answer has a
+wide table in it.
 
-Settings → Shortcut → Its voice → **Try the voice…** opens a window to hear it
-in, and to watch it work. What is *said* is not what is written — code, links
-and markdown are taken off first, because read literally they are noise — and
-it is said one sentence at a time, so a long answer starts before the rest of
-it has been made. Both are shown as they happen, with the time each sentence
-took to make against the time it lasts. On the card this was written for that
-settles at about seven times real time, which is the number that decides
-whether an answer sounds immediate or arrives in pieces.
+It is a window rather than a tooltip because of what is in it. An answer from an
+agent is not a line of status text: it is paragraphs, and it is the thing you
+actually wanted. It used to appear in a bubble that faded after eleven seconds,
+which was the wrong shape for it.
 
-It is pitched up a tenth by default, which makes it lighter and younger. Not by
-playing it faster: the sentence is generated proportionally longer and its sample
-rate raised to match, so pitch and formants move together — which is what a
-shorter vocal tract is — and the duration comes out unchanged. Nothing is
-resampled and nothing is stretched, so there is no artefact to hear: only the
-number in the header changed. Measured, 100% is 195 Hz and 110% is 213. The dial
-is in the same window, next to the speed.
+The bubbles beside the control are still there and still fade — they are the
+glance, not the record. What is happening, in the corner of your eye, gone in a
+few seconds. Nothing is lost when one goes; all of it is behind the third lobe.
+The panel is kept between runs, in `history.jsonl` beside the recordings.
 
-The voice is `tr_TR-fettah-medium`, and it was chosen by measurement rather than
-by name. Piper ships three Turkish voices, two of them called Fahrettin and
-Fettah, which are men's names. The fundamental frequency of a sentence from each
-says otherwise: dfki and fahrettin sit at 103 and 102 Hz, and fettah sits at 190
-with nothing below 166. Reading the names would have picked a man.
+**There is no speech.** There was: Piper, a Turkish voice picked by measuring
+the fundamental frequency of all three rather than by reading their names, and a
+window to hear it in. It was taken out with the third lobe. An answer worth
+having is worth being able to read twice, and a spoken one is gone the moment it
+finishes. Everything the agent says now arrives in writing, which is also why it
+is no longer told to answer in plain sentences: markdown is how an answer should
+look when it is read.
 
 ## What it does
 
@@ -302,10 +306,11 @@ happens, and another combination is the answer.
 ```
 dikte.py          entry point, tray icon, state machine, IPC
 plat.py           what the two platforms do differently, in one place
-companion.py      the two-lobed control, and the band across the middle
-conversation.py   the loop from being asked to listen to having answered
-router.py         whether the words were wanted, or something done with them
-tts.py            saying the answer out loud, through Piper
+companion.py      the three-lobed control, and the bubbles beside it
+chat.py           the history as a conversation, with markdown answers
+history.py        what was asked and what came back, kept between runs
+theme.py          one palette, one set of shapes, one stylesheet
+conversation.py   the loop from the first press to the answer
 live.py           re-reading the audio so far, while it is still being spoken
 audio.py          PCM capture: pw-record or ffmpeg, and the device lists
 meeting.py        channel split, speaker labelling, cleanup, minutes

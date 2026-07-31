@@ -38,13 +38,13 @@ import assistant  # noqa: E402
 import audio  # noqa: E402
 import paste  # noqa: E402
 import config as cfg  # noqa: E402
+import history  # noqa: E402
+import theme  # noqa: E402
 import hotkey  # noqa: E402
 import i18n  # noqa: E402
 import icons  # noqa: E402
 import meeting  # noqa: E402
 import plat  # noqa: E402
-import router  # noqa: E402
-import tts  # noqa: E402
 import whispercpp  # noqa: E402
 import companion as companion_states  # noqa: E402
 from companion import Companion  # noqa: E402
@@ -64,6 +64,12 @@ IDLE, RECORDING, BUSY = "idle", "recording", "busy"
 # and having dictation blocked for that minute is the whole problem. They share
 # only the microphone, which is one device and so can serve one of them at a time.
 DICTATION, ASK, ZENO = "dictation", "ask", "zeno"
+# Which lobe of the control means which job. Written down rather than left
+# to the two names happening to be spelled the same: they were not, and the
+# writing lobe silently sent everything to the agent because "write" is not
+# "dictate". Nothing about that was visible except the wrong half lighting up.
+LOBE_MODE = {companion_states.WRITE: conversation.DICTATE,
+             companion_states.ASK: conversation.ASK}
 # A meeting runs alongside dictation rather than through it: writing up an hour
 # of audio takes minutes, and dictation should not be held hostage to it.
 M_IDLE, M_RECORDING, M_WORKING = "idle", "recording", "working"
@@ -103,17 +109,22 @@ class Dikte:
         # The character is one thing for the whole application, where the corner
         # indicators are one per job: it is a place on the screen rather than a
         # report, and two of them would be two assistants.
-        self.companion = Companion(self.conf)
+        # Everything either lobe has ever done, kept between runs. Built
+        # before the control, which is handed it: the third lobe opens a window
+        # onto this and there is nothing for it to open without one.
+        self.turns = history.Store(self.conf["history_limit"])
+        self.companion = Companion(self.conf, self.turns)
+        # The turn being answered right now, so the answer can be filed against
+        # the question it belongs to rather than guessed at afterwards.
+        self.turn = None
         self.recorder = audio.Recorder()
         self.live = LiveTranscriber(self.conf, self.recorder)
-        self.voice = tts.Voice(self.conf, cfg.DATA_DIR)
         self.pipeline = Pipeline(self.conf)
         self.ask_pipeline = Pipeline(self.conf)
         # Its own chain, so being spoken to never queues behind a dictation the
         # shortcut started, and neither of them ever sees the other's stages.
         self.zeno_pipeline = Pipeline(self.conf)
-        self.zeno = Conversation(self.conf, self.recorder, self.zeno_pipeline,
-                                 self.voice)
+        self.zeno = Conversation(self.conf, self.recorder, self.zeno_pipeline)
         self.meeting_recorder = audio.MeetingRecorder()
         self.meetings = MeetingPipeline(self.conf)
         self.evdev = hotkey.Hotkey()
@@ -161,9 +172,8 @@ class Dikte:
         self.zeno.failed.connect(self._on_zeno_failed)
         self.zeno.finish_dictation.connect(self._paste_for_zeno)
         self.zeno.ask_agent.connect(self._ask_for_zeno)
-        self.zeno.agent_answered.connect(self.zeno.answer)
+        self.zeno.agent_answered.connect(self._on_zeno_answered)
         self.zeno.agent_failed.connect(self._on_zeno_failed)
-        self.voice.started.connect(self._on_speaking)
         self.companion.asked.connect(self._companion_asked)
         self.companion.moved.connect(self._companion_moved)
         # Started here as well as when the settings are saved: the listener is
@@ -204,6 +214,10 @@ class Dikte:
         self.zeno_action = QAction(t("Talk to Zeno"), self.menu)
         self.zeno_action.triggered.connect(self.talk_to_zeno)
         self.menu.addAction(self.zeno_action)
+
+        self.history_action = QAction(t("History…"), self.menu)
+        self.history_action.triggered.connect(self.companion.toggle_history)
+        self.menu.addAction(self.history_action)
 
         self.reset_action = QAction(t("Start a new conversation"), self.menu)
         self.reset_action.triggered.connect(self.reset_conversation)
@@ -833,16 +847,13 @@ class Dikte:
         """
         if self.recording or self.state != IDLE or self.zeno.busy:
             return
-        if not self.zeno.wake(mode or router.ASK):
+        wanted = LOBE_MODE.get(mode, mode) or conversation.ASK
+        if not self.zeno.wake(wanted):
             return
         self.recorder_owner = ZENO
-        self.companion.show_recording(asking=mode != router.DICTATE)
+        self.companion.show_recording(asking=wanted != conversation.DICTATE)
         self.companion.stage_note(t("Listening…"))
         self._set_state(RECORDING)
-
-    def _on_speaking(self):
-        """Visibly talking while it talks."""
-        self.companion.show_speaking()
 
     def _on_zeno_state(self, state):
         """Keep the sphere and the microphone in step with the conversation."""
@@ -857,12 +868,29 @@ class Dikte:
             self.companion.show_done()
 
     def _on_zeno_failed(self, message):
+        self.turns.finish(self.turn, error=message)
+        self.turn = None
         self._report(message, self.overlay)
         if self.state != IDLE:
             self._set_state(IDLE)
 
+    def _on_zeno_answered(self, answer, warning):
+        """File the answer against its question, then let the loop show it."""
+        self.turns.finish(self.turn, answer=answer, error=warning)
+        self.turn = None
+        self.zeno.answer(answer, warning)
+
     def _paste_for_zeno(self, text):
-        """It was asked to write something down, so put it where the cursor is."""
+        """It was asked to write something down, so put it where the cursor is.
+
+        Written to the history *first*, and then pasted. The other way round
+        lost the sentence outright whenever the clipboard was momentarily held
+        by another application — which happens, and is exactly the dictation you
+        most want kept, because now the only copy of it is gone. Recorded first,
+        a failed paste is an inconvenience: the words are in the panel behind
+        the third lobe and can be copied out of it.
+        """
+        self.turns.record(history.DICTATE, "", text)
         try:
             paste.copy(text)
             if self.conf["auto_paste"]:
@@ -877,6 +905,9 @@ class Dikte:
         """Hand the question to the agent, on its own chain."""
         self.companion.stage_note(t("Asking {name}…", name=i18n.name(
             assistant.display_name(self.conf), "dative")))
+        # Shown as soon as it goes out, written down only once it comes back.
+        self.turn = self.turns.begin(history.ASK, question,
+                                     self.conf["assistant_model"])
         threading.Thread(target=self._run_agent, args=(question,),
                          daemon=True).start()
 
@@ -891,8 +922,7 @@ class Dikte:
         """
         try:
             answer, warning = assistant.ask(
-                question, self.conf, on_stage=self.zeno.stage.emit,
-                spoken=bool(self.conf["tts_enabled"]))
+                question, self.conf, on_stage=self.zeno.stage.emit)
         except assistant.Cancelled:
             answer, warning = "", ""
         except assistant.AssistantError as exc:
@@ -901,13 +931,17 @@ class Dikte:
         self.zeno.agent_answered.emit(answer, warning)
 
     def _companion_asked(self, mode):
-        """A lobe was pressed.
+        """A lobe was pressed. Press, talk, press.
 
-        While something is already going on it is the way out of it, whichever
-        lobe: an assistant reading a long answer with no way to stop it is the
-        worst thing on the desktop, and hunting for the right half of a button
-        to stop it with would be the second worst.
+        The second press ends the recording rather than throwing it away, which
+        is the whole interaction; only a press while it is already working calls
+        anything off. Either lobe does either, because hunting for the right
+        half of a button to stop it with would be nearly as bad as having no way
+        to stop it.
         """
+        if self.zeno.listening:
+            self.zeno.finish()
+            return
         if self.zeno.busy:
             self.zeno.cancel()
             self.recorder_owner = None
@@ -959,6 +993,7 @@ class Dikte:
         self._quitting = True
         self.evdev.stop()
         self.live.stop()
+        self.companion.close_history()
         self.companion.set_visible(False)
         if self.recording:
             self.recorder.cancel()
@@ -1092,6 +1127,9 @@ def main():
         return 2
 
     app = QApplication(sys.argv)
+    # One look for every window this puts on the screen, settled in one
+    # place. Before anything is built, so nothing is styled twice.
+    theme.apply_to(app, cfg.DATA_DIR)
     app.setApplicationName("Dikte")
     app.setDesktopFileName("dikte")
     app.setQuitOnLastWindowClosed(False)

@@ -15,6 +15,7 @@ import unittest
 import unittest.mock
 
 import audio
+import i18n
 import hotkey
 import paste
 import plat
@@ -142,6 +143,11 @@ class Commands(unittest.TestCase):
 
     @unittest.skipUnless(plat.WINDOWS, "DirectShow is Windows only")
     def test_a_meeting_without_a_loopback_says_so_rather_than_recording_half(self):
+        """The language is pinned because the message is translated, and which
+        one is loaded depends on which other test module ran first."""
+        was = i18n.language()
+        i18n.set_language("en")
+        self.addCleanup(i18n.set_language, was)
         self.devices = [self.devices[0]]
         with self.assertRaises(audio.AudioError) as caught:
             audio.meeting_command("", "")

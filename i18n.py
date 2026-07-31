@@ -618,20 +618,19 @@ TR = {
 
     # --- the character -----------------------------------------------------
     "Character": "Karakter",
-    "A small control on the edge of the screen, with two halves. The left one "
-    "writes: what you say is tidied and put where the cursor is. The right one "
-    "asks: what you say goes to the agent and the answer comes back spoken. Two "
-    "buttons rather than one with a mode, because being wrong about a mode means "
-    "a note sent to an agent or a question typed into a document. What it hears "
-    "appears across the middle of the screen, over a ribbon that moves with your "
-    "voice. Drag it anywhere along the edge; press either half again to stop.":
-        "Ekranın kenarında, iki yarımlı küçük bir kontrol. Soldaki yazar: "
-        "söylediğin şey temizlenip imlecin olduğu yere konur. Sağdaki sorar: "
-        "söylediğin şey ajana gider ve cevap sesli döner. Modlu tek düğme değil, "
-        "iki düğme; çünkü modda yanılmak, ajana gönderilmiş bir not ya da "
-        "belgeye yazılmış bir soru demektir. Duyduğu şey ekranın ortasında, "
-        "sesinle dalgalanan bir şeridin üstünde görünür. Kenar boyunca "
-        "sürükleyebilirsin; durdurmak için yarımlardan birine tekrar bas.",
+    "A small control on the edge of the screen, with three lobes. The pen "
+    "writes: what you say is tidied and put where the cursor is. The spark "
+    "asks: what you say goes to the agent and the answer comes back in "
+    "writing. The third opens the history — everything either of the other "
+    "two has done, in full. Press, talk, press: the second press is what ends "
+    "a recording, and nothing is listening for you to go quiet. Drag it "
+    "anywhere along the edge.":
+        "Ekranın kenarında, üç loblu küçük bir kontrol. Kalem yazar: "
+        "söylediğin şey temizlenip imlecin olduğu yere konur. Kıvılcım sorar: "
+        "söylediğin şey ajana gider ve cevap yazılı döner. Üçüncüsü geçmişi "
+        "açar — diğer ikisinin yaptığı her şey, tastamam. Bas, konuş, bas: "
+        "kaydı bitiren şey ikinci basıştır, sesinin kesilmesini bekleyen bir "
+        "şey yok. Kenar boyunca istediğin yere sürükleyebilirsin.",
     "Show the control": "Kontrolü göster",
     "Where it sits": "Nerede duruyor",
     "Side": "Kenar",
@@ -647,10 +646,12 @@ TR = {
     "How long it stays up": "Ne kadar kalsın",
     "Shortest": "En kısa",
     "Longest": "En uzun",
-    "How long the band stays up is worked out from how much there is to read, "
-    "between these two.":
-        "Bandın ne kadar kalacağı, okunacak metnin uzunluğundan bu iki değer "
-        "arasında hesaplanır.",
+    "How long a bubble beside the control stays up is worked out from how much "
+    "there is to read, between these two. Nothing is lost when one goes: it is "
+    "all in the history behind the third lobe.":
+        "Kontrolün yanındaki bir balonun ne kadar kalacağı, okunacak metnin "
+        "uzunluğundan bu iki değer arasında hesaplanır. Balon gidince bir şey "
+        "kaybolmaz: hepsi üçüncü lobun ardındaki geçmişte durur.",
     "While you are still talking": "Sen konuşurken",
     "Write the sentence as it is spoken": "Cümleyi söylenirken yaz",
     "The audio so far is read back on the local whisper.cpp server about once a "
@@ -666,80 +667,40 @@ TR = {
 
     # --- being spoken to ---------------------------------------------------
     "Listening…": "Dinliyorum…",
-    "Go ahead, I am listening.": "Buyur, dinliyorum.",
-
-
     "Talk to Zeno": "Zeno'yla konuş",
     "Stop Zeno": "Zeno'yu durdur",
-    "Zeno listens until you stop talking, works out whether you wanted the "
-    "words themselves or something done with them, and answers out loud. The "
-    "tray menu and “dikte zeno” start it too.":
-        "Zeno sen konuşmayı bırakana kadar dinler, sözcüklerin kendisini mi "
-        "yoksa onlarla bir şey yapılmasını mı istediğini çıkarır ve sesli "
-        "cevap verir. Tepsi menüsü ve “dikte zeno” da başlatır.",
-    "Its voice": "Sesi",
-    "Say the answer out loud": "Cevabı sesli söyle",
-    "Off, the answer only appears in a bubble beside the character.":
-        "Kapalıyken cevap yalnızca karakterin yanındaki balonda görünür.",
-    "Speed": "Hız",
-    "Pitch": "Perde",
-    "Higher is a lighter, younger voice: the pitch and the shape of the "
-    "mouth move together, which is what a shorter vocal tract is. Measured, "
-    "100% is 195 Hz and 110% is 213.":
-        "Yükseltmek sesi inceltir ve gençleştirir: perde ile ağzın biçimi "
-        "birlikte hareket eder, kısa bir ses yolu tam olarak budur. "
-        "Ölçüldü: %100 ile 195 Hz, %110 ile 213 Hz.",
+    "Press a lobe, say what you want, and press again. The pen writes what "
+    "you said; the spark asks the agent. The tray menu and “dikte zeno” "
+    "start the asking one too.":
+        "Bir loba bas, ne istediğini söyle, tekrar bas. Kalem söylediğini "
+        "yazar; kıvılcım ajana sorar. Tepsi menüsü ve “dikte zeno” da "
+        "sormayı başlatır.",
     "Close": "Kapat",
-    "Try the voice…": "Sesi dene…",
-    "Try the voice": "Sesi dene",
-    "Speaking with {voice}, through {piper}.":
-        "{voice} sesiyle, {piper} üzerinden konuşuyor.",
-    "Write anything, or leave the example:":
-        "İstediğini yaz, ya da örneği olduğu gibi bırak:",
-    "It will say this, in {count} pieces — one at a time, so a long answer "
-    "starts before the rest of it has been made.{trimmed}":
-        "Şunu söyleyecek, {count} parça hâlinde — teker teker, böylece uzun bir "
-        "cevap gerisi hazırlanmadan önce başlar.{trimmed}",
-    "  Code, links and markdown have been taken off.":
-        "  Kod, bağlantılar ve markdown çıkarıldı.",
-    "What happened:": "Ne oldu:",
-    "Say it": "Söyle",
     "Stop": "Durdur",
-    "Nothing to say.": "Söylenecek bir şey yok.",
-    "{index}.  made in {made:.2f} s, lasts {lasts:.1f} s ({ratio:.0f}× real "
-    "time)  ·  {sentence}":
-        "{index}.  {made:.2f} sn'de üretildi, {lasts:.1f} sn sürüyor "
-        "({ratio:.0f}× gerçek zaman)  ·  {sentence}",
-    "It could not be said. Check the two paths above.":
-        "Söylenemedi. Yukarıdaki iki yolu kontrol et.",
+    "Stopped.": "Durduruldu.",
 
-    "The first line carries loading the voice, which happens once. After that: {ratio:.0f}× real time.":
-        "İlk satır sesin yüklenmesini de taşır, o da bir kez olur. Sonrası: {ratio:.0f}× gerçek zaman.",
-    "Hear it": "Dinle",
-    "Ready: {voice}": "Hazır: {voice}",
-    "Piper was not found. Put piper.exe on PATH, or in "
-    "%LOCALAPPDATA%\\Programs\\piper.":
-        "Piper bulunamadı. piper.exe dosyasını PATH'e ya da "
-        "%LOCALAPPDATA%\\Programs\\piper altına koy.",
-    "No voice file. Put {name} in {folder}.":
-        "Ses dosyası yok. {name} dosyasını {folder} altına koy.",
-    "Speech is made on this machine by Piper, the way transcription is made by "
-    "whisper.cpp: a program with a voice in a file, and nothing sent anywhere. "
-    "The Turkish voice was picked by measuring the pitch of each of the three "
-    "Piper offers rather than by reading their names, two of which are men's "
-    "names and one of which is not a man.":
-        "Konuşma bu makinede Piper ile üretilir; tıpkı yazıya çevirmenin "
-        "whisper.cpp ile üretildiği gibi: sesi bir dosyada duran bir program, "
-        "ve hiçbir yere gönderilen bir şey yok. Türkçe ses, Piper'ın sunduğu üç "
-        "sesin perdesi ölçülerek seçildi; adlarına bakılarak değil — ikisi "
-        "erkek adı taşıyor ve biri erkek değil.",
-    "Openings that mean you want the words themselves written down rather than "
-    "acted on — one per line, added to the ones it already knows (“yaz”, "
-    "“not al”, “metne dök”, “write this down”).":
-        "Sözcüklerin kendisinin yazılmasını istediğini belirten başlangıçlar — "
-        "her satıra bir tane, zaten bildiklerinin üstüne eklenir (“yaz”, "
-        "“not al”, “metne dök”, “write this down”).",
-    "Merhaba, ben Zeno. Seni dinliyorum.": "Merhaba, ben Zeno. Seni dinliyorum.",
+    # --- the history, and the panel it is read in --------------------------
+    "History…": "Geçmiş…",
+    "Dictation": "Dikte",
+    "Today": "Bugün",
+    "Yesterday": "Dün",
+    "Ready": "Hazır",
+    "{n} messages": "{n} mesaj",
+    "Copy": "Kopyala",
+    "Copied": "Kopyalandı",
+    "Copied.": "Kopyalandı.",
+    "Copy all as markdown": "Tümünü markdown olarak kopyala",
+    "Clear the history": "Geçmişi temizle",
+    "Wider": "Genişlet",
+    "Narrower": "Daralt",
+    "Working on it…": "Üzerinde çalışıyorum…",
+    "It did not work.": "Olmadı.",
+    "(nothing was heard)": "(bir şey duyulmadı)",
+    "Nothing here yet": "Burada henüz bir şey yok",
+    "Press the pen to write what you say, or the spark to ask the agent. "
+    "Everything either of them does shows up here.":
+        "Söylediğini yazmak için kaleme, ajana sormak için kıvılcıma bas. "
+        "İkisinin yaptığı her şey burada görünür.",
 
     # --- meetings: tray and pipeline ---------------------------------------
     "Record a meeting": "Toplantı kaydet",

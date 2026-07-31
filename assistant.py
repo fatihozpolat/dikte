@@ -176,7 +176,7 @@ def working_dir(conf):
     return os.path.expanduser("~")
 
 
-def ask(prompt, conf, on_stage=None, should_stop=None, spoken=False):
+def ask(prompt, conf, on_stage=None, should_stop=None):
     """Run the prompt through the configured agent. Returns (answer, warning).
 
     `warning` is set when the answer arrived but something about the run should
@@ -185,7 +185,7 @@ def ask(prompt, conf, on_stage=None, should_stop=None, spoken=False):
     """
     name = provider(conf)
     if name == "openrouter":
-        return _ask_openrouter(prompt, conf, on_stage, spoken)
+        return _ask_openrouter(prompt, conf, on_stage)
 
     binary = executable(name)
     if not shutil.which(binary):
@@ -197,13 +197,13 @@ def ask(prompt, conf, on_stage=None, should_stop=None, spoken=False):
     run = _ask_claude if name == "claude" else _ask_codex
     session = read_session(name, conf["assistant_session_minutes"] * 60)
     try:
-        return run(prompt, conf, session, on_stage, should_stop, spoken)
+        return run(prompt, conf, session, on_stage, should_stop)
     except _SessionGone:
         # The conversation it pointed at is not there any more: the history was
         # cleared, or it was started somewhere else. Say nothing and start over,
         # because from the outside this is just the first command of the day.
         clear_session()
-        return run(prompt, conf, "", on_stage, should_stop, spoken)
+        return run(prompt, conf, "", on_stage, should_stop)
 
 
 class _SessionGone(Exception):
@@ -212,13 +212,13 @@ class _SessionGone(Exception):
 
 # --- Claude Code ----------------------------------------------------------
 
-def _ask_claude(prompt, conf, session, on_stage, should_stop, spoken=False):
+def _ask_claude(prompt, conf, session, on_stage, should_stop):
     cmd = [
         "claude", "-p", prompt,
         "--output-format", "stream-json", "--verbose",
         "--model", conf["assistant_model"],
         "--permission-mode", conf["assistant_permission_mode"],
-        "--append-system-prompt", conf.assistant_prompt(spoken),
+        "--append-system-prompt", conf.assistant_prompt(),
     ]
     effort = CLAUDE_EFFORT.get(conf["assistant_reasoning"], "")
     if effort:
@@ -273,7 +273,7 @@ def _denial_warning(event):
 
 # --- Codex ----------------------------------------------------------------
 
-def _ask_codex(prompt, conf, session, on_stage, should_stop, spoken=False):
+def _ask_codex(prompt, conf, session, on_stage, should_stop):
     # Codex takes no system prompt of its own, so the instruction rides along in
     # front of the command, kept apart from it so the two are not read as one.
     body = f"{conf.assistant_prompt()}\n\n---\n\n{prompt}"
@@ -328,7 +328,7 @@ def _codex_label(item):
 
 # --- OpenRouter -----------------------------------------------------------
 
-def _ask_openrouter(prompt, conf, on_stage, spoken=False):
+def _ask_openrouter(prompt, conf, on_stage):
     """No tools, no files, no calendar: a question and an answer.
 
     It is the fallback for a machine with neither CLI on it, so it says what it
@@ -342,7 +342,7 @@ def _ask_openrouter(prompt, conf, on_stage, spoken=False):
     try:
         answer = api.chat(
             messages, conf.openrouter_key(), conf["assistant_openrouter_model"],
-            conf.assistant_prompt(spoken), reasoning=conf["assistant_reasoning"],
+            conf.assistant_prompt(), reasoning=conf["assistant_reasoning"],
             base_url=conf["openrouter_base_url"],
             timeout=conf["assistant_timeout"],
         )

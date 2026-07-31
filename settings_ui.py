@@ -23,7 +23,6 @@ import filetranscribe
 import hotkey
 import meeting
 import plat
-import tts
 import whispercpp
 from filetranscribe import FileTranscriber
 from i18n import t
@@ -147,7 +146,7 @@ class SettingsWindow(QDialog):
         self.setWindowTitle(t("Dikte Settings"))
         self.resize(680, 640)
 
-        tabs = QTabWidget(self)
+        tabs = self.tabs = QTabWidget(self)
         tabs.addTab(self._general_tab(), t("General"))
         tabs.addTab(self._companion_tab(), t("Character"))
         tabs.addTab(self._api_tab(), t("API and models"))
@@ -266,14 +265,13 @@ class SettingsWindow(QDialog):
         layout = QVBoxLayout(page)
 
         intro = QLabel(t(
-            "A small control on the edge of the screen, with two halves. The "
-            "left one writes: what you say is tidied and put where the cursor "
-            "is. The right one asks: what you say goes to the agent and the "
-            "answer comes back spoken. Two buttons rather than one with a mode, "
-            "because being wrong about a mode means a note sent to an agent or a "
-            "question typed into a document. What it hears appears across the "
-            "middle of the screen, over a ribbon that moves with your voice. "
-            "Drag it anywhere along the edge; press either half again to stop."
+            "A small control on the edge of the screen, with three lobes. The "
+            "pen writes: what you say is tidied and put where the cursor is. "
+            "The spark asks: what you say goes to the agent and the answer "
+            "comes back in writing. The third opens the history — everything "
+            "either of the other two has done, in full. Press, talk, press: "
+            "the second press is what ends a recording, and nothing is "
+            "listening for you to go quiet. Drag it anywhere along the edge."
         ))
         intro.setWordWrap(True)
         layout.addWidget(intro)
@@ -319,8 +317,9 @@ class SettingsWindow(QDialog):
         self.companion_bubble_max.setSuffix(t(" s"))
         bubble_form.addRow(t("Longest"), self.companion_bubble_max)
         span = QLabel(t(
-            "How long the band stays up is worked out from how much there is to "
-            "read, between these two."
+            "How long a bubble beside the control stays up is worked out from "
+            "how much there is to read, between these two. Nothing is lost when "
+            "one goes: it is all in the history behind the third lobe."
         ))
         span.setWordWrap(True)
         bubble_form.addRow(span)
@@ -993,9 +992,9 @@ class SettingsWindow(QDialog):
         self.zeno_shortcut = self._shortcut_box(t("none"))
         zeno.addRow(t("Talk to Zeno"), self.zeno_shortcut)
         talking = QLabel(t(
-            "Zeno listens until you stop talking, works out whether you wanted "
-            "the words themselves or something done with them, and answers out "
-            "loud. The tray menu and “dikte zeno” start it too."
+            "Press a lobe, say what you want, and press again. The pen writes "
+            "what you said; the spark asks the agent. The tray menu and "
+            "“dikte zeno” start the asking one too."
         ))
         talking.setWordWrap(True)
         zeno.addRow(talking)
@@ -1009,91 +1008,8 @@ class SettingsWindow(QDialog):
         note.setWordWrap(True)
         layout.addWidget(note)
 
-        layout.addWidget(self._voice_box())
         layout.addStretch(1)
         return page
-
-    def _voice_box(self):
-        box = QGroupBox(t("Its voice"))
-        form = QFormLayout(box)
-
-        self.tts_enabled = QCheckBox(t("Say the answer out loud"))
-        self.tts_enabled.setToolTip(t(
-            "Off, the answer only appears in a bubble beside the character."
-        ))
-        form.addRow("", self.tts_enabled)
-
-        self.tts_speed = QSpinBox()
-        self.tts_speed.setRange(50, 200)
-        self.tts_speed.setSingleStep(5)
-        self.tts_speed.setSuffix(" %")
-        form.addRow(t("Speed"), self.tts_speed)
-
-        self.tts_pitch = QSpinBox()
-        self.tts_pitch.setRange(85, 125)
-        self.tts_pitch.setSingleStep(2)
-        self.tts_pitch.setSuffix(" %")
-        self.tts_pitch.setToolTip(t(
-            "Higher is a lighter, younger voice: the pitch and the shape of the "
-            "mouth move together, which is what a shorter vocal tract is. "
-            "Measured, 100% is 195 Hz and 110% is 213."))
-        form.addRow(t("Pitch"), self.tts_pitch)
-
-        self.tts_try = QPushButton(t("Try the voice…"))
-        self.tts_try.clicked.connect(self._open_voice_lab)
-        form.addRow("", self.tts_try)
-
-        self.tts_status = QLabel("")
-        self.tts_status.setWordWrap(True)
-        form.addRow(self.tts_status)
-
-        note = QLabel(t(
-            "Speech is made on this machine by Piper, the way transcription is "
-            "made by whisper.cpp: a program with a voice in a file, and nothing "
-            "sent anywhere. The Turkish voice was picked by measuring the pitch "
-            "of each of the three Piper offers rather than by reading their "
-            "names, two of which are men's names and one of which is not a man."
-        ))
-        note.setWordWrap(True)
-        form.addRow(note)
-
-        openings = QLabel(t(
-            "Openings that mean you want the words themselves written down "
-            "rather than acted on — one per line, added to the ones it already "
-            "knows (“yaz”, “not al”, “metne dök”, “write this down”)."
-        ))
-        openings.setWordWrap(True)
-        form.addRow(openings)
-        self.dictation_openings = QPlainTextEdit()
-        self.dictation_openings.setMaximumHeight(70)
-        form.addRow(self.dictation_openings)
-        return box
-
-    def _refresh_voice_status(self):
-        found = tts.binary_path(self.conf["tts_binary"])
-        voice = tts.voice_path(cfg.DATA_DIR, self.conf["tts_voice"])
-        self.tts_try.setEnabled(bool(found and voice))
-        if not found:
-            self.tts_status.setText(t(
-                "Piper was not found. Put piper.exe on PATH, or in "
-                "%LOCALAPPDATA%\\Programs\\piper."))
-        elif not voice:
-            self.tts_status.setText(t(
-                "No voice file. Put {name} in {folder}.",
-                name=tts.VOICE, folder=tts.voices_dir(cfg.DATA_DIR)))
-        else:
-            self.tts_status.setText(t("Ready: {voice}",
-                                      voice=os.path.basename(voice)))
-
-    def _open_voice_lab(self):
-        """A window to hear it in, and to see what it does before it speaks."""
-        self.conf["tts_speed"] = self.tts_speed.value() / 100.0
-        self.conf["tts_pitch"] = self.tts_pitch.value() / 100.0
-        lab = VoiceLab(self.conf, cfg.DATA_DIR, self)
-        lab.exec()
-        # Whatever was settled on in there is what the boxes should now say.
-        self.tts_speed.setValue(lab.speed.value())
-        self.tts_pitch.setValue(lab.pitch.value())
 
     def _history_tab(self):
         page = QWidget()
@@ -1285,11 +1201,6 @@ class SettingsWindow(QDialog):
         self.shortcut.setCurrentText(conf["shortcut"])
         self.evdev_enabled.setChecked(conf["evdev_hotkey"])
         self.zeno_shortcut.setCurrentText(conf["zeno_shortcut"])
-        self.tts_enabled.setChecked(conf["tts_enabled"])
-        self.tts_speed.setValue(int(round(float(conf["tts_speed"] or 1.0) * 100)))
-        self.tts_pitch.setValue(int(round(float(conf["tts_pitch"] or 1.0) * 100)))
-        self.dictation_openings.setPlainText(conf["dictation_openings"])
-        self._refresh_voice_status()
 
         self.history_limit.setValue(max(0, int(conf["history_limit"])))
 
@@ -1414,10 +1325,6 @@ class SettingsWindow(QDialog):
         conf["shortcut"] = self.shortcut.currentText().strip() or "Ctrl+Space"
         conf["evdev_hotkey"] = self.evdev_enabled.isChecked()
         conf["zeno_shortcut"] = self.zeno_shortcut.currentText().strip()
-        conf["tts_enabled"] = self.tts_enabled.isChecked()
-        conf["tts_speed"] = self.tts_speed.value() / 100.0
-        conf["tts_pitch"] = self.tts_pitch.value() / 100.0
-        conf["dictation_openings"] = self.dictation_openings.toPlainText().strip()
         conf["history_limit"] = self.history_limit.value()
         conf.save()
         # A lowered limit should bite now, not on the next dictation.
@@ -2178,195 +2085,6 @@ print("bu okunmayacak")
 ```
 
 Ayrıntılar https://takvim.example.com/abc adresinde. Başka bir şey var mı?"""
-
-
-class VoiceLab(QDialog):
-    """A place to hear the voice, and to see what it does before it speaks.
-
-    The voice is the one part of Dikte with no visible workings: text goes in,
-    sound comes out, and when the sound is wrong there is nothing to look at.
-    So this shows the two steps in between. What is *said* is not what is
-    written — a code block, a link and the punctuation that makes a heading are
-    taken off first, because read literally they are noise — and it is said one
-    sentence at a time rather than all at once, which is what lets a long answer
-    start before it has finished being made.
-
-    Both of those are visible here as they happen, with the time each sentence
-    took to make against the time it lasts. That ratio is the number that says
-    whether the machine can keep ahead of its own speech, and it is the only
-    thing that decides whether an answer sounds immediate or arrives in pieces.
-    """
-
-    def __init__(self, conf, data_dir, parent=None):
-        super().__init__(parent)
-        self.conf = conf
-        self.data_dir = data_dir
-        self.setWindowTitle(t("Try the voice"))
-        self.resize(660, 620)
-
-        layout = QVBoxLayout(self)
-        self.status = QLabel("")
-        self.status.setWordWrap(True)
-        layout.addWidget(self.status)
-
-        layout.addWidget(QLabel(t("Write anything, or leave the example:")))
-        self.text = QPlainTextEdit(SAMPLE_SPEECH)
-        self.text.setMinimumHeight(120)
-        self.text.textChanged.connect(self._refresh_plan)
-        layout.addWidget(self.text)
-
-        self.plan_label = QLabel("")
-        self.plan_label.setWordWrap(True)
-        layout.addWidget(self.plan_label)
-        self.plan = QListWidget()
-        self.plan.setMaximumHeight(120)
-        self.plan.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        layout.addWidget(self.plan)
-
-        row = QHBoxLayout()
-        row.addWidget(QLabel(t("Speed")))
-        self.speed = QSpinBox()
-        self.speed.setRange(50, 200)
-        self.speed.setSingleStep(5)
-        self.speed.setSuffix(" %")
-        self.speed.setValue(int(round(float(conf["tts_speed"] or 1.0) * 100)))
-        row.addWidget(self.speed)
-        row.addSpacing(14)
-        row.addWidget(QLabel(t("Pitch")))
-        self.pitch = QSpinBox()
-        self.pitch.setRange(85, 125)
-        self.pitch.setSingleStep(2)
-        self.pitch.setSuffix(" %")
-        self.pitch.setValue(int(round(float(conf["tts_pitch"] or 1.0) * 100)))
-        row.addWidget(self.pitch)
-        row.addStretch(1)
-        self.say_button = QPushButton(t("Say it"))
-        self.say_button.clicked.connect(self._say)
-        row.addWidget(self.say_button)
-        self.stop_button = QPushButton(t("Stop"))
-        self.stop_button.clicked.connect(self._stop)
-        self.stop_button.setEnabled(False)
-        row.addWidget(self.stop_button)
-        layout.addLayout(row)
-
-        layout.addWidget(QLabel(t("What happened:")))
-        self.log = QListWidget()
-        layout.addWidget(self.log)
-
-        close = QPushButton(t("Close"))
-        close.clicked.connect(self.accept)
-        closing = QHBoxLayout()
-        closing.addStretch(1)
-        closing.addWidget(close)
-        layout.addLayout(closing)
-
-        # Its own voice, on a copy of the settings, so trying a speed here does
-        # not change what the assistant answers with until Save is pressed.
-        self._conf = dict(conf.data) if hasattr(conf, "data") else dict(conf)
-        self._conf["tts_enabled"] = True
-        self.voice = tts.Voice(_Plain(self._conf), data_dir, parent=self)
-        self.voice.spoke.connect(self._on_spoke)
-        self.voice.finished.connect(self._on_finished)
-        self.voice.failed.connect(self._on_failed)
-        self._spoken = 0
-        self._made = []
-        self._refresh_status()
-        self._refresh_plan()
-
-    # ---- what it will do --------------------------------------------------
-
-    def _refresh_status(self):
-        binary = tts.binary_path(self.conf["tts_binary"])
-        voice = tts.voice_path(self.data_dir, self.conf["tts_voice"])
-        if not binary or not voice:
-            self.status.setText(t(
-                "Piper was not found. Put piper.exe on PATH, or in "
-                "%LOCALAPPDATA%" + chr(92) + "Programs" + chr(92) + "piper."
-            ) if not binary else t(
-                "No voice file. Put {name} in {folder}.",
-                name=tts.VOICE, folder=tts.voices_dir(self.data_dir)))
-            self.say_button.setEnabled(False)
-            return
-        self.status.setText(t(
-            "Speaking with {voice}, through {piper}.",
-            voice=os.path.basename(voice), piper=binary))
-
-    def _refresh_plan(self):
-        """The sentences it would actually say, as the text is typed."""
-        written = self.text.toPlainText()
-        parts = tts.sentences(written)
-        self.plan.clear()
-        for index, part in enumerate(parts, start=1):
-            self.plan.addItem(f"{index}.  {part}")
-        removed = len(tts.speakable(written)) < len(written.strip())
-        self.plan_label.setText(t(
-            "It will say this, in {count} pieces — one at a time, so a long "
-            "answer starts before the rest of it has been made.{trimmed}",
-            count=len(parts),
-            trimmed=t("  Code, links and markdown have been taken off.")
-            if removed else "",
-        ))
-
-    # ---- doing it ----------------------------------------------------------
-
-    def _say(self):
-        self.log.clear()
-        self._spoken = 0
-        self._made = []
-        self._conf["tts_speed"] = self.speed.value() / 100.0
-        self._conf["tts_pitch"] = self.pitch.value() / 100.0
-        if not self.voice.say(self.text.toPlainText()):
-            self.log.addItem(t("Nothing to say."))
-            return
-        self.say_button.setEnabled(False)
-        self.stop_button.setEnabled(True)
-
-    def _stop(self):
-        self.voice.stop()
-        self.log.addItem(t("Stopped."))
-        self._on_finished()
-
-    def _on_spoke(self, sentence, made, lasts):
-        self._spoken += 1
-        self._made.append((made, lasts))
-        ratio = (lasts / made) if made > 0 else 0.0
-        self.log.addItem(t(
-            "{index}.  made in {made:.2f} s, lasts {lasts:.1f} s "
-            "({ratio:.0f}× real time)  ·  {sentence}",
-            index=self._spoken, made=made, lasts=lasts, ratio=ratio,
-            sentence=sentence[:44],
-        ))
-        self.log.scrollToBottom()
-
-    def _on_finished(self):
-        self.say_button.setEnabled(True)
-        self.stop_button.setEnabled(False)
-        # The first line is always the slow one, and saying so is the
-        # difference between a number that looks broken and one that
-        # explains itself: it carries the voice being loaded, which happens
-        # once and not again.
-        if len(self._made) < 2:
-            return
-        rest = self._made[1:]
-        made = sum(m for m, _ in rest)
-        lasts = sum(l for _, l in rest)
-        self.log.addItem(t(
-            "The first line carries loading the voice, which happens once. "
-            "After that: {ratio:.0f}× real time.",
-            ratio=(lasts / made) if made else 0.0))
-        self.log.scrollToBottom()
-
-    def _on_failed(self, _message):
-        self.log.addItem(t("It could not be said. Check the two paths above."))
-        self._on_finished()
-
-    def reject(self):
-        self.voice.stop()
-        super().reject()
-
-    def accept(self):
-        self.voice.stop()
-        super().accept()
 
 
 class _Plain:

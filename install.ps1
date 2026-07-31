@@ -69,29 +69,6 @@ if (Get-Command whisper-server.exe -ErrorAction SilentlyContinue) {
     Say  "at whisper-server.exe. Or pick OpenAI/OpenRouter under Settings."
 }
 
-# 3b. Piper, for the voice --------------------------------------------------
-# Only needed to have it speak. Everything else works without it, and the
-# character falls back to saying its answers in a bubble.
-$piper = (Get-Command piper.exe -ErrorAction SilentlyContinue).Source
-if (-not $piper) {
-    $guess = Join-Path $env:LOCALAPPDATA "Programs\piper\piper\piper.exe"
-    if (Test-Path $guess) { $piper = $guess }
-}
-$voice = Join-Path $env:LOCALAPPDATA "dikte\voices\tr_TR-fettah-medium.onnx"
-if ($piper -and (Test-Path $voice)) {
-    Ok "Piper and a Turkish voice present (it can speak)"
-} else {
-    Warn "No voice yet: it will answer in a bubble but say nothing out loud."
-    Say  "  piper_windows_amd64.zip from"
-    Say  "    https://github.com/rhasspy/piper/releases"
-    Say  "  unzipped into %LOCALAPPDATA%\Programs\piper\"
-    Say  "  tr_TR-fettah-medium.onnx and .onnx.json from"
-    Say  "    https://huggingface.co/rhasspy/piper-voices/tree/main/tr/tr_TR"
-    Say  "  into %LOCALAPPDATA%\dikte\voices\"
-    Say  "Of the three Turkish voices that one is the female one, measured"
-    Say  "rather than guessed from the name."
-}
-
 # 4. Recording what the speakers play --------------------------------------
 # Only meetings need this, and only Windows makes it a question: there is no
 # monitor source here the way there is on PipeWire.

@@ -10,176 +10,22 @@ being given, and that the assistant is never listening while it is talking.
     python3 -m unittest test_zeno -v
 """
 
+import io
 import os
+import pathlib
+import shutil
+import tempfile
 import time
 import unittest
+import unittest.mock
 
 from PyQt6.QtWidgets import QApplication
 
 import audio
+import history
 import conversation
-import router
-import tts
 
 _app = QApplication.instance() or QApplication([])
-
-
-class WhatWasMeant(unittest.TestCase):
-    def assertDictated(self, said, expected):
-        mode, payload = router.route(said)
-        self.assertEqual(mode, router.DICTATE, said)
-        self.assertEqual(payload, expected, said)
-
-    def assertAsked(self, said):
-        mode, payload = router.route(said)
-        self.assertEqual(mode, router.ASK, said)
-        self.assertEqual(payload, said.strip())
-
-    def test_being_told_to_write_something_hands_back_the_something(self):
-        self.assertDictated("Yaz: bugün üç karar aldık.", "bugün üç karar aldık.")
-        self.assertDictated("yaz şunu bugün hava güzeldi", "bugün hava güzeldi")
-        self.assertDictated("Not al, yarın Ahmet'i ara.", "yarın Ahmet'i ara.")
-        self.assertDictated("Metne dök: merhaba dünya", "merhaba dünya")
-
-    def test_english_openings_work_too(self):
-        self.assertDictated("Write this down: we agreed three things",
-                            "we agreed three things")
-        self.assertDictated("take a note buy milk", "buy milk")
-
-    def test_an_instruction_on_its_own_leaves_the_words_still_to_come(self):
-        for said in ("Dikte et", "yazar mısın bunu", "write this down"):
-            mode, payload = router.route(said)
-            self.assertEqual(mode, router.DICTATE, said)
-            self.assertEqual(payload, "", said)
-
-    def test_anything_else_goes_to_the_agent_whole(self):
-        self.assertAsked("Takvime perşembe saat üçe toplantı ekle")
-        self.assertAsked("Bugün hava nasıl?")
-        self.assertAsked("Notlarımı aç")
-
-    def test_the_opening_is_only_an_opening(self):
-        """The trap this exists for: a word that means "write" in the middle of
-        a sentence is not an instruction to write the sentence down."""
-        self.assertAsked("Sonra sana yazarım, şimdi toplantıdayım")
-        self.assertAsked("Yazılım ekibine haber ver")
-        self.assertAsked("Bu notu Ahmet'e ilet")
-
-    def test_the_dotted_and_dotless_i_are_the_same_word_here(self):
-        """Turkish has two i's and a transcriber picks between them by ear. If
-        that decided whether a command was heard, half of them would not be."""
-        self.assertEqual(router.fold("YAZI"), router.fold("yazı"))
-        self.assertEqual(router.fold("Dikte Et"), "dikte et")
-        self.assertEqual(router.fold("METNE DÖK"), "metne dok")
-
-    def test_something_added_by_hand_is_honoured(self):
-        mode, payload = router.route("kaydet bunu bir fikir", "kaydet")
-        self.assertEqual(mode, router.DICTATE)
-        self.assertEqual(payload, "bir fikir")
-
-    def test_nothing_said_is_not_a_dictation(self):
-        self.assertEqual(router.route(""), (router.ASK, ""))
-        self.assertEqual(router.route("   "), (router.ASK, ""))
-
-    def test_the_longest_matching_opening_wins(self):
-        """"not al" has to be tried before anything shorter would swallow it."""
-        mode, payload = router.route("not al süt almayı unutma")
-        self.assertEqual(mode, router.DICTATE)
-        self.assertEqual(payload, "süt almayı unutma")
-
-
-class WhatIsWorthSaying(unittest.TestCase):
-    def test_a_code_block_is_not_read_out(self):
-        spoken = tts.speakable("Tamam.\n```python\nprint('x')\n```\nBitti.")
-        self.assertNotIn("print", spoken)
-        self.assertIn("Tamam", spoken)
-        self.assertIn("Bitti", spoken)
-
-    def test_a_link_is_not_read_out(self):
-        self.assertNotIn("http", tts.speakable("Bak: https://example.com/a/b şuraya."))
-
-    def test_the_punctuation_that_makes_a_heading_is_dropped(self):
-        self.assertNotIn("#", tts.speakable("## Başlık\n**kalın** _eğik_"))
-
-    def test_it_is_split_into_sentences_so_it_can_start_sooner(self):
-        parts = tts.sentences("Bir. İki! Üç? Dört.")
-        self.assertEqual(len(parts), 4)
-
-    def test_a_recital_is_cut_short(self):
-        parts = tts.sentences("Cümle. " * 400)
-        self.assertLessEqual(sum(len(p) for p in parts), tts.MAX_SPOKEN + 20)
-
-    def test_nothing_to_say_is_no_sentences(self):
-        self.assertEqual(tts.sentences(""), [])
-        self.assertEqual(tts.sentences("```only code```"), [])
-
-    def test_how_long_a_rendered_sentence_lasts_is_read_off_the_file(self):
-        """The lab reports a ratio of make-time to sound-time, and a wrong
-        sound-time would make a working voice look broken."""
-        import audio as audio_module
-        path = audio_module.write_wav(bytes(2 * audio_module.RATE))
-        try:
-            self.assertAlmostEqual(tts._seconds(path), 1.0, places=2)
-        finally:
-            os.unlink(path)
-
-    def test_a_file_that_is_not_a_recording_lasts_no_time_at_all(self):
-        self.assertEqual(tts._seconds("nowhere.wav"), 0.0)
-
-    def test_the_lab_would_say_exactly_what_the_assistant_would(self):
-        """The plan shown before speaking has to be the thing that is spoken,
-        or it is a demonstration of something else."""
-        import settings_ui
-        self.assertEqual(tts.sentences(settings_ui.SAMPLE_SPEECH),
-                         tts.sentences(settings_ui.SAMPLE_SPEECH))
-        self.assertGreater(len(tts.sentences(settings_ui.SAMPLE_SPEECH)), 1)
-        for piece in tts.sentences(settings_ui.SAMPLE_SPEECH):
-            self.assertNotIn("```", piece)
-            self.assertNotIn("http", piece)
-
-    def test_pitch_is_kept_inside_what_the_trick_can_do(self):
-        """Raising the sample rate moves pitch and formants together, which is
-        a shorter vocal tract; pushed far enough it stops being a person."""
-        class Conf(dict):
-            pass
-        voice = tts.Voice(Conf({"tts_speed": 1.0, "tts_pitch": 9.0}), ".")
-        self.assertLessEqual(voice._pitch(), 1.25)
-        voice.conf["tts_pitch"] = 0.1
-        self.assertGreaterEqual(voice._pitch(), 0.85)
-        voice.conf["tts_pitch"] = None
-        self.assertEqual(voice._pitch(), 1.0)
-
-    def test_raising_the_pitch_leaves_the_length_alone(self):
-        """The sentence is generated proportionally longer so that playing it
-        higher lands back on the duration it was asked for."""
-        import audio as audio_module
-        path = audio_module.write_wav(bytes(2 * audio_module.RATE))
-        try:
-            tts._repitch(path, 1.10)
-            with __import__("contextlib").closing(
-                    __import__("wave").open(path)) as handle:
-                self.assertEqual(handle.getframerate(),
-                                 round(audio_module.RATE * 1.10))
-                self.assertEqual(handle.getnframes(), audio_module.RATE)
-        finally:
-            os.unlink(path)
-
-    def test_leaving_the_pitch_alone_does_not_touch_the_file(self):
-        import audio as audio_module
-        path = audio_module.write_wav(bytes(2 * audio_module.RATE))
-        try:
-            before = os.path.getmtime(path), tts._seconds(path)
-            tts._repitch(path, 1.0)
-            self.assertEqual(tts._seconds(path), before[1])
-        finally:
-            os.unlink(path)
-
-    def test_speed_runs_the_opposite_way_to_duration(self):
-        class Conf(dict):
-            pass
-        voice = tts.Voice(Conf({"tts_speed": 2.0, "tts_enabled": True}), ".")
-        fast = voice._length_scale()
-        voice.conf["tts_speed"] = 0.5
-        self.assertGreater(voice._length_scale(), fast)
 
 
 # --- the loop -------------------------------------------------------------
@@ -234,22 +80,6 @@ class FakePipeline:
         self.runs.append({"wav": wav, "ask": ask, "paste": paste_it})
 
 
-class FakeVoice:
-    def __init__(self, works=True):
-        self.finished = FakeSignal()
-        self.failed = FakeSignal()
-        self.said = []
-        self.stopped = 0
-        self.works = works
-
-    def say(self, text):
-        self.said.append(text)
-        return self.works
-
-    def stop(self):
-        self.stopped += 1
-
-
 class Conf(dict):
     pass
 
@@ -257,7 +87,7 @@ class Conf(dict):
 def a_conf(**changes):
     conf = Conf({"mic_target": "", "speech_margin_db": 10.0,
                  "silence_db": -55.0, "min_voiced_seconds": 0.3,
-                 "dictation_openings": ""})
+})
     conf.update(changes)
     return conf
 
@@ -274,13 +104,14 @@ def loud_rms(seconds):
 
 
 class TheLoop(unittest.TestCase):
+    """Press, talk, press. Both edges are given, so both are tested."""
+
     def setUp(self):
         self.conf = a_conf()
         self.recorder = FakeRecorder()
         self.pipeline = FakePipeline()
-        self.voice = FakeVoice()
         self.zeno = conversation.Conversation(
-            self.conf, self.recorder, self.pipeline, self.voice)
+            self.conf, self.recorder, self.pipeline)
         self.states = []
         self.zeno.state_changed.connect(self.states.append)
         self.pasted = []
@@ -293,125 +124,133 @@ class TheLoop(unittest.TestCase):
     def test_it_starts_out_waiting(self):
         self.assertEqual(self.zeno.state, conversation.WAITING)
         self.assertFalse(self.zeno.busy)
+        self.assertFalse(self.zeno.listening)
 
-    def test_being_called_opens_the_microphone_and_listens(self):
-        self.assertTrue(self.zeno.wake())
+    def test_the_first_press_opens_the_microphone(self):
+        self.assertTrue(self.zeno.wake(conversation.ASK))
         self.assertEqual(self.zeno.state, conversation.LISTENING)
+        self.assertTrue(self.zeno.listening)
         self.assertEqual(self.recorder.started, 1)
 
-    def test_being_called_twice_over_is_ignored(self):
-        self.zeno.wake()
-        self.assertFalse(self.zeno.wake())
+    def test_pressing_a_second_lobe_while_listening_changes_nothing(self):
+        self.zeno.wake(conversation.ASK)
+        self.assertFalse(self.zeno.wake(conversation.DICTATE))
         self.assertEqual(self.recorder.started, 1)
+        self.assertEqual(self.zeno.mode, conversation.ASK)
 
-    def test_called_and_then_nothing_gives_up_quietly(self):
-        """A name misheard off the television costs a moment of listening and
-        nothing else — no answer, no bubble, no recording kept."""
+    def test_the_second_press_stops_it_and_keeps_what_was_said(self):
+        """Stopped, not thrown away. The second press is how a recording ends,
+        so it must never do what giving up on one does."""
         self.zeno.wake()
-        self.recorder.rms = quiet_rms(1.0)
-        self.zeno._began = time.monotonic() - conversation.PATIENCE_SECONDS - 0.1
-        self.zeno._look()
-        self.assertEqual(self.zeno.state, conversation.WAITING)
-        self.assertEqual(self.recorder.cancelled, 1)
-        self.assertEqual(self.answers, [])
+        self.assertTrue(self.zeno.finish())
+        self.assertEqual(self.zeno.state, conversation.WORKING)
+        self.assertEqual(self.recorder.stopped, 1)
+        self.assertEqual(self.recorder.cancelled, 0)
 
-    def test_the_microphones_own_hiss_is_not_somebody_talking(self):
-        """The bug this guards: relative loudness alone is met by the spread of
-        a quiet room's own noise, and it sat there recording nothing for ever."""
-        import random
-        random.seed(3)
-        blocks = int(6.0 / (audio.CHUNK_FRAMES / audio.RATE))
+    def test_a_second_press_when_it_is_not_listening_does_nothing(self):
+        self.assertFalse(self.zeno.finish())
         self.zeno.wake()
-        # Hiss: quiet, but with the ragged spread real microphone noise has.
-        self.recorder.rms = [abs(random.gauss(0, 0.00035)) + 1e-5
-                             for _ in range(blocks)]
-        self.zeno._began = time.monotonic() - conversation.PATIENCE_SECONDS - 0.1
-        self.zeno._look()
-        self.assertEqual(self.zeno.state, conversation.WAITING)
-        self.assertEqual(self.recorder.cancelled, 1)
+        self.zeno.finish()
+        self.assertFalse(self.zeno.finish())
+        self.assertEqual(self.recorder.stopped, 1)
 
-    def test_a_pause_to_find_a_word_does_not_end_the_instruction(self):
+    def test_quiet_does_not_end_it(self):
+        """Why silence detection was taken out: somebody hunting for a word
+        pauses, and the sentence they were building is cut in half."""
         self.zeno.wake()
-        self.recorder.rms = loud_rms(1.0)
-        self.zeno._look()
+        self.recorder.rms = quiet_rms(30.0)
+        for _ in range(20):
+            _app.processEvents()
         self.assertEqual(self.zeno.state, conversation.LISTENING)
-        # Quiet, but not for as long as it takes to mean "finished".
-        self.recorder.rms = loud_rms(1.0) + quiet_rms(0.4)
-        self.zeno._spoke_at = time.monotonic() - (conversation.SETTLE_SECONDS - 0.3)
-        self.zeno._look()
-        self.assertEqual(self.zeno.state, conversation.LISTENING)
+        self.assertEqual(self.recorder.stopped, 0)
 
-    def test_settling_into_silence_ends_it(self):
+    def test_a_press_that_never_comes_back_is_not_recorded_for_ever(self):
         self.zeno.wake()
-        self.recorder.rms = loud_rms(1.0)
-        self.zeno._look()
-        # Quiet at the end, and quiet for long enough to mean finished.
-        self.recorder.rms = loud_rms(1.0) + quiet_rms(0.5)
-        self.zeno._spoke_at = time.monotonic() - conversation.SETTLE_SECONDS - 0.1
-        self.zeno._look()
+        self.zeno._out_of_time()
         self.assertEqual(self.zeno.state, conversation.WORKING)
         self.assertEqual(self.recorder.stopped, 1)
 
-    def test_talking_for_far_too_long_ends_it_too(self):
-        self.zeno.wake()
-        self.recorder.rms = loud_rms(1.0)
-        self.zeno._began = time.monotonic() - conversation.LIMIT_SECONDS - 1
-        self.zeno._look()
-        self.assertEqual(self.zeno.state, conversation.WORKING)
-
     def test_the_recording_is_transcribed_without_being_pasted(self):
-        """What was said has to be read before anybody can tell whether it was
-        meant to be pasted at all."""
+        """What was said has to be read before anything can be done with it,
+        and under the asking lobe it must not be pasted at all."""
         self.zeno.wake()
         self.zeno.take("clip.wav", 2.0, [])
         self.assertEqual(len(self.pipeline.runs), 1)
         self.assertFalse(self.pipeline.runs[0]["ask"])
         self.assertFalse(self.pipeline.runs[0]["paste"])
 
-    def test_an_instruction_to_write_ends_in_a_paste(self):
-        self.zeno.wake()
+    def test_the_writing_lobe_pastes_and_never_reaches_the_agent(self):
+        self.zeno.wake(conversation.DICTATE)
         self.zeno.take("clip.wav", 2.0, [])
-        self.pipeline.finished.emit("ham", "Yaz: bugün üç karar aldık.", "")
-        self.assertEqual(self.pasted, ["bugün üç karar aldık."])
+        self.pipeline.finished.emit("ham", "Bugun uc karar aldik.", "")
+        self.assertEqual(self.pasted, ["Bugun uc karar aldik."])
         self.assertEqual(self.asked, [])
-        self.assertEqual(self.zeno.state, conversation.WAITING)
 
-    def test_anything_else_goes_to_the_agent(self):
-        self.zeno.wake()
+    def test_the_writing_lobe_pastes_even_when_it_sounds_like_an_order(self):
+        """Nothing is read out of the words. The button already said."""
+        self.zeno.wake(conversation.DICTATE)
         self.zeno.take("clip.wav", 2.0, [])
-        self.pipeline.finished.emit("ham", "Takvime toplantı ekle", "")
-        self.assertEqual(self.asked, ["Takvime toplantı ekle"])
+        self.pipeline.finished.emit("ham", "Takvime toplanti ekle", "")
+        self.assertEqual(self.pasted, ["Takvime toplanti ekle"])
+        self.assertEqual(self.asked, [])
+
+    def test_the_asking_lobe_asks_and_never_pastes(self):
+        self.zeno.wake(conversation.ASK)
+        self.zeno.take("clip.wav", 2.0, [])
+        self.pipeline.finished.emit("ham", "Takvime toplanti ekle", "")
+        self.assertEqual(self.asked, ["Takvime toplanti ekle"])
         self.assertEqual(self.pasted, [])
 
-    def test_told_to_write_with_nothing_to_write_it_waits_for_the_words(self):
-        self.zeno.wake()
+    def test_the_asking_lobe_asks_even_when_it_starts_with_write(self):
+        """"Yaz bana bir e-posta" is a thing you say *to* an assistant. Reading
+        the opening word would have pasted it instead of answering it."""
+        self.zeno.wake(conversation.ASK)
         self.zeno.take("clip.wav", 2.0, [])
-        self.pipeline.finished.emit("ham", "Dikte et", "")
-        self.assertTrue(self.zeno.pending_dictation)
+        self.pipeline.finished.emit("ham", "yaz bana bir e-posta taslagi", "")
+        self.assertEqual(self.asked, ["yaz bana bir e-posta taslagi"])
         self.assertEqual(self.pasted, [])
-        self.assertTrue(self.voice.said)
-        # The next thing said is the note, whatever it happens to start with.
-        self.pipeline.finished.emit("ham", "Takvime toplantı ekle", "")
-        self.assertEqual(self.pasted, ["Takvime toplantı ekle"])
-        self.assertFalse(self.zeno.pending_dictation)
 
-    def test_the_answer_is_spoken_and_shown(self):
-        self.zeno.wake()
-        self.zeno._set_state(conversation.WORKING)
-        self.zeno.answer("Perşembe üçe eklendi.")
-        self.assertEqual(self.voice.said, ["Perşembe üçe eklendi."])
-        self.assertIn("Perşembe üçe eklendi.", self.answers)
-        self.assertEqual(self.zeno.state, conversation.ANSWERING)
-        self.voice.finished.emit()
-        self.assertEqual(self.zeno.state, conversation.WAITING)
+    def test_what_was_heard_is_shown_either_way(self):
+        seen = []
+        self.zeno.heard.connect(seen.append)
+        self.zeno.wake(conversation.DICTATE)
+        self.zeno.take("clip.wav", 2.0, [])
+        self.pipeline.finished.emit("ham", "iki kelime", "")
+        self.assertEqual(seen, ["iki kelime"])
 
-    def test_with_no_voice_the_answer_is_still_shown(self):
-        self.voice.works = False
+    def test_the_answer_is_shown_and_then_it_is_free_again(self):
         self.zeno.wake()
-        self.zeno._set_state(conversation.WORKING)
-        self.zeno.answer("Perşembe üçe eklendi.")
-        self.assertIn("Perşembe üçe eklendi.", self.answers)
+        self.zeno.finish()
+        self.zeno.answer("Persembe uce eklendi.")
+        self.assertIn("Persembe uce eklendi.", self.answers)
         self.assertEqual(self.zeno.state, conversation.WAITING)
+        self.assertFalse(self.zeno.busy)
+
+    def test_a_warning_alongside_an_answer_is_reported_as_well(self):
+        seen = []
+        self.zeno.failed.connect(seen.append)
+        self.zeno.wake()
+        self.zeno.finish()
+        self.zeno.answer("Oldu.", "temizleme calismadi")
+        self.assertEqual(self.answers, ["Oldu."])
+        self.assertEqual(seen, ["temizleme calismadi"])
+
+    def test_what_the_agent_says_crosses_from_its_own_thread(self):
+        """A timer started on a worker thread never fires, and every answer was
+        being lost that way without a word about it. A signal does cross."""
+        import threading
+        self.zeno.agent_answered.connect(self.zeno.answer)
+        self.zeno.wake()
+        self.zeno.finish()
+        threading.Thread(
+            target=lambda: self.zeno.agent_answered.emit("Oldu.", ""),
+            daemon=True).start()
+        for _ in range(400):
+            _app.processEvents()
+            if self.answers:
+                break
+            time.sleep(0.005)
+        self.assertEqual(self.answers, ["Oldu."])
 
     def test_a_transcription_that_came_back_empty_ends_it(self):
         self.zeno.wake()
@@ -422,29 +261,153 @@ class TheLoop(unittest.TestCase):
         self.assertEqual(self.asked, [])
 
     def test_a_failure_is_reported_and_does_not_leave_it_stuck(self):
-        self.zeno.wake()
-        self.zeno.take("clip.wav", 2.0, [])
         seen = []
         self.zeno.failed.connect(seen.append)
+        self.zeno.wake()
+        self.zeno.take("clip.wav", 2.0, [])
         self.pipeline.failed.emit("mikrofon yok")
         self.assertEqual(seen, ["mikrofon yok"])
         self.assertEqual(self.zeno.state, conversation.WAITING)
-        self.assertFalse(self.zeno.pending_dictation)
 
     def test_giving_up_stops_everything_it_started(self):
         self.zeno.wake()
-        self.zeno.pending_dictation = True
         self.zeno.cancel()
         self.assertEqual(self.zeno.state, conversation.WAITING)
         self.assertEqual(self.recorder.cancelled, 1)
-        self.assertEqual(self.voice.stopped, 1)
-        self.assertFalse(self.zeno.pending_dictation)
+
+    def test_it_can_be_used_again_straight_after(self):
+        self.zeno.wake(conversation.DICTATE)
+        self.zeno.take("clip.wav", 2.0, [])
+        self.pipeline.finished.emit("ham", "ilki", "")
+        self.assertTrue(self.zeno.wake(conversation.ASK))
+        self.zeno.take("clip.wav", 2.0, [])
+        self.pipeline.finished.emit("ham", "ikincisi", "")
+        self.assertEqual(self.pasted, ["ilki"])
+        self.assertEqual(self.asked, ["ikincisi"])
 
     def test_a_stage_from_the_chain_is_passed_on(self):
         seen = []
         self.zeno.stage.connect(seen.append)
-        self.pipeline.stage.emit("Yazıya çevriliyor…")
-        self.assertEqual(seen, ["Yazıya çevriliyor…"])
+        self.pipeline.stage.emit("Yaziya cevriliyor...")
+        self.assertEqual(seen, ["Yaziya cevriliyor..."])
+
+
+class TheStore(unittest.TestCase):
+    """What is kept of a turn, and what is not."""
+
+    def setUp(self):
+        import config as cfg
+        self.tmp = tempfile.mkdtemp(prefix="dikte-history-")
+        patch = unittest.mock.patch.object(
+            cfg, "HISTORY_FILE", pathlib.Path(self.tmp) / "history.jsonl")
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.store = history.Store()
+
+    def test_it_starts_empty(self):
+        self.assertEqual(self.store.turns(), [])
+
+    def test_a_question_shows_before_it_is_answered(self):
+        """You should see what went out while it is still out. The panel is
+        driven from the store, so the store is where the in-flight turn lives."""
+        turn = self.store.begin(history.ASK, "takvime toplanti ekle")
+        self.assertEqual([t.question for t in self.store.turns()],
+                         ["takvime toplanti ekle"])
+        self.assertTrue(turn.pending)
+
+    def test_an_unanswered_question_is_never_written_down(self):
+        """If the application stops between the asking and the answering there
+        is nothing there to resume, so there is nothing worth keeping."""
+        self.store.begin(history.ASK, "yarim kalan")
+        self.assertEqual(history.Store().turns(), [])
+
+    def test_the_answer_is_what_makes_it_worth_keeping(self):
+        turn = self.store.begin(history.ASK, "soru")
+        self.store.finish(turn, answer="cevap")
+        kept = history.Store().turns()
+        self.assertEqual([(t.question, t.answer) for t in kept],
+                         [("soru", "cevap")])
+        self.assertFalse(kept[0].pending)
+
+    def test_a_failure_is_kept_too_and_says_so(self):
+        turn = self.store.begin(history.ASK, "soru")
+        self.store.finish(turn, error="claude bulunamadi")
+        kept = history.Store().turns()
+        self.assertTrue(kept[0].failed)
+        self.assertEqual(kept[0].answer, "claude bulunamadi")
+
+    def test_calling_it_off_leaves_nothing_behind(self):
+        turn = self.store.begin(history.ASK, "bosver")
+        self.store.drop(turn)
+        self.assertEqual(self.store.turns(), [])
+        self.assertEqual(history.Store().turns(), [])
+
+    def test_a_dictation_is_kept_whole_in_one_go(self):
+        self.store.record(history.DICTATE, "", "Bugun uc karar aldik.")
+        kept = history.Store().turns()
+        self.assertEqual(kept[0].mode, history.DICTATE)
+        self.assertEqual(kept[0].answer, "Bugun uc karar aldik.")
+
+    def test_the_rows_the_worker_already_writes_are_read_back(self):
+        """history.jsonl predates this module by a long way. Rewriting the file
+        into a new shape would have lost whatever a half-done migration lost."""
+        import config as cfg
+        cfg.append_history({"ts": "2026-01-02 09:30:00", "mode": "",
+                            "question": "", "text": "eski bir dikte"})
+        cfg.append_history({"ts": "2026-01-02 09:31:00", "mode": "ask",
+                            "question": "eski bir soru", "text": "eski cevap"})
+        kept = history.Store().turns()
+        self.assertEqual([t.mode for t in kept],
+                         [history.DICTATE, history.ASK])
+        self.assertEqual(kept[0].answer, "eski bir dikte")
+        self.assertEqual(kept[1].question, "eski bir soru")
+
+    def test_an_unreadable_line_does_not_take_the_rest_with_it(self):
+        import config as cfg
+        cfg.append_history({"mode": "ask", "question": "s", "text": "c"})
+        with io.open(cfg.HISTORY_FILE, "a", encoding="utf-8") as handle:
+            handle.write("{ bu json degil\n")
+        self.assertEqual(len(history.Store().turns()), 1)
+
+    def test_they_come_back_oldest_first(self):
+        self.store.record(history.ASK, "bir", "1")
+        self.store.record(history.ASK, "iki", "2")
+        self.assertEqual([t.question for t in self.store.turns()],
+                         ["bir", "iki"])
+
+    def test_the_one_in_flight_is_last(self):
+        self.store.record(history.ASK, "bitmis", "cevap")
+        self.store.begin(history.ASK, "suruyor")
+        self.assertEqual([t.question for t in self.store.turns()],
+                         ["bitmis", "suruyor"])
+
+    def test_clearing_it_clears_the_one_in_flight_too(self):
+        self.store.record(history.ASK, "bir", "1")
+        self.store.begin(history.ASK, "iki")
+        self.store.clear()
+        self.assertEqual(self.store.turns(), [])
+
+    def test_it_says_when_something_changed(self):
+        seen = []
+        self.store.changed.connect(lambda: seen.append(True))
+        turn = self.store.begin(history.ASK, "soru")
+        self.store.finish(turn, answer="cevap")
+        self.assertEqual(len(seen), 2)
+
+    def test_the_whole_thing_comes_out_as_markdown(self):
+        self.store.record(history.ASK, "takvime ekle", "## Eklendi\n\nOldu.")
+        text = history.as_markdown(self.store.turns())
+        self.assertIn("> takvime ekle", text)
+        self.assertIn("## Eklendi", text)
+
+    def test_a_history_that_cannot_be_written_is_not_an_error(self):
+        """The answer is already on the screen. A disk that will not take it is
+        not a reason to lose the answer as well."""
+        import config as cfg
+        with unittest.mock.patch.object(
+                cfg, "append_history", side_effect=OSError("disk dolu")):
+            self.store.record(history.ASK, "soru", "cevap")
 
 
 if __name__ == "__main__":
