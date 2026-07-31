@@ -19,6 +19,7 @@ import os
 import random
 import shutil
 import tempfile
+import time
 import unittest
 
 import audio
@@ -286,6 +287,165 @@ class Segmenting(unittest.TestCase):
         self.assertEqual(wake.levels([]), 0.0)
         self.assertAlmostEqual(wake.levels([32767] * 100), 1.0, places=3)
         self.assertAlmostEqual(wake.levels([0] * 100), 0.0)
+
+
+
+
+# --- the whole path, with the microphone stood in for ----------------------
+
+class FakeStdout:
+    """Hands out a recording in blocks, then silence for ever, like a device."""
+
+    def __init__(self, chunks):
+        self._data = b"".join(chunks)
+        self._at = 0
+
+    def read(self, count):
+        if self._at >= len(self._data):
+            return b"\x00" * count          # a quiet room, not end of stream
+        piece = self._data[self._at:self._at + count]
+        self._at += count
+        return piece.ljust(count, b"\x00")
+
+
+class FakeProcess:
+    def __init__(self, chunks):
+        self.stdout = FakeStdout(chunks)
+        self._alive = True
+
+    def poll(self):
+        return None if self._alive else 0
+
+    def terminate(self):
+        self._alive = False
+
+    def kill(self):
+        self._alive = False
+
+    def wait(self, timeout=None):
+        self._alive = False
+        return 0
+
+
+def as_bytes(samples):
+    import array
+    return array.array("h", [max(-32768, min(32767, int(s))) for s in samples]).tobytes()
+
+
+def a_saying(seed, pitch=190.0):
+    """One "utterance": quiet, a burst of something voice-like, quiet."""
+    quiet = [0] * int(audio.RATE * 0.6)
+    return quiet + speechy(0.85, pitch, seed=seed) + quiet
+
+
+class TheWholePath(unittest.TestCase):
+    """Recording the name and then hearing it, through everything in between.
+
+    The microphone is the only thing replaced. Segmentation, features,
+    calibration, what is written to disk, what is read back and the match all
+    run for real, because each of those has been wrong at some point and the
+    parts were right every time.
+    """
+
+    def setUp(self):
+        import unittest.mock
+        self.tmp = tempfile.mkdtemp(prefix="dikte-path-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.path = os.path.join(self.tmp, "wake.json")
+        self.conf = {"mic_target": "", "wake_sensitivity": 1.0}
+        self.chunks = []
+        patch = unittest.mock.patch.object(
+            wake.subprocess, "Popen", lambda *a, **k: FakeProcess(self.chunks))
+        patch.start()
+        self.addCleanup(patch.stop)
+        command = unittest.mock.patch.object(
+            wake.audio, "capture_command", lambda target="": ["fake"])
+        command.start()
+        self.addCleanup(command.stop)
+
+    def enrol(self, sayings):
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance() or QApplication([])
+        self.chunks = [as_bytes(s) for s in sayings]
+        enroller = wake.Enroller(self.conf, "Zeno", wanted=len(sayings))
+        got = []
+        enroller.finished.connect(got.append)
+        enroller.failed.connect(lambda _m: got.append(None))
+        self.assertTrue(enroller.start())
+        for _ in range(600):
+            app.processEvents()
+            if got:
+                break
+            time.sleep(0.01)
+        enroller.stop()
+        self.assertTrue(got, "enrolment never finished")
+        return got[0]
+
+    def test_recording_it_four_times_produces_something_that_can_be_matched(self):
+        templates = self.enrol([a_saying(seed) for seed in (1, 2, 3, 4)])
+        self.assertIsNotNone(templates)
+        self.assertEqual(len(templates.rows), 4)
+        self.assertTrue(templates.ready)
+        templates.save(self.path)
+
+        again = wake.Templates.load(self.path)
+        self.assertTrue(again.ready)
+
+        # What can be asserted from made-up audio is that the fifth saying is
+        # much nearer the recordings than something else is. Whether it falls
+        # inside the threshold is a question about a real voice in a real room,
+        # and a synthetic fixture that claimed to answer it would be measuring
+        # its own noise generator.
+        _heard, near, _end = again.matches(wake.head_features(a_saying(5)))
+        other = [0] * int(audio.RATE * 0.6) + speechy(1.4, 95.0, seed=9)
+        _missed, far, _end = again.matches(wake.head_features(other))
+        self.assertLess(near * 2, far)
+
+    def test_something_else_said_afterwards_is_not_the_name(self):
+        templates = self.enrol([a_saying(seed) for seed in (1, 2, 3, 4)])
+        # A different pitch and a different envelope: another word entirely.
+        other = [0] * int(audio.RATE * 0.6) + speechy(1.4, 95.0, seed=9)
+        heard, _score, _end = templates.matches(wake.head_features(other))
+        self.assertFalse(heard)
+
+    def test_the_listener_says_so_when_it_hears_it(self):
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance() or QApplication([])
+        self.enrol([a_saying(seed) for seed in (1, 2, 3, 4)]).save(self.path)
+
+        self.chunks = [as_bytes(a_saying(7))]
+        listener = wake.WakeListener(self.conf, self.path)
+        woke = []
+        listener.woken.connect(lambda: woke.append(True))
+        self.assertTrue(listener.start())
+        self.addCleanup(listener.stop)
+        for _ in range(400):
+            app.processEvents()
+            if woke:
+                break
+            time.sleep(0.01)
+        self.assertTrue(woke, "the listener never reported the name")
+
+    def test_it_will_not_start_before_the_name_has_been_recorded(self):
+        listener = wake.WakeListener(self.conf, self.path)
+        self.assertFalse(listener.start())
+        self.assertFalse(listener.running)
+
+    def test_it_is_deaf_while_something_else_is_using_the_microphone(self):
+        from PyQt6.QtWidgets import QApplication
+        app = QApplication.instance() or QApplication([])
+        self.enrol([a_saying(seed) for seed in (1, 2, 3, 4)]).save(self.path)
+        self.chunks = [as_bytes(a_saying(7))]
+        listener = wake.WakeListener(self.conf, self.path)
+        woke = []
+        listener.woken.connect(lambda: woke.append(True))
+        listener.pause(True)
+        self.assertTrue(listener.start())
+        self.addCleanup(listener.stop)
+        for _ in range(150):
+            app.processEvents()
+            time.sleep(0.01)
+        self.assertEqual(woke, [])
 
 
 if __name__ == "__main__":
