@@ -437,6 +437,19 @@ DEFAULTS = {
     # itself comes out of the recordings; this is the dial over the top of it.
     "wake_sensitivity": 1.0,
 
+    # --- its voice --------------------------------------------------------
+    # Piper, with the one Turkish voice of the three that measured female:
+    # fettah sits at 190 Hz, dfki and fahrettin at 103 and 102.
+    "tts_enabled": True,
+    "tts_binary": "",               # empty -> piper from PATH or the usual place
+    "tts_voice": "",                # empty -> the default voice in the data dir
+    "tts_speed": 1.0,
+
+    # --- being spoken to --------------------------------------------------
+    # Openings that mean the words themselves are wanted, on top of the ones
+    # router.py already knows. One per line.
+    "dictation_openings": "",
+
     "keep_audio": False,
     "history_limit": 200,
     "file_timestamps": False,

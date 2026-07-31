@@ -35,15 +35,18 @@ from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon  # noqa: E402
 
 import assistant  # noqa: E402
 import audio  # noqa: E402
+import paste  # noqa: E402
 import config as cfg  # noqa: E402
 import hotkey  # noqa: E402
 import i18n  # noqa: E402
 import icons  # noqa: E402
 import meeting  # noqa: E402
 import plat  # noqa: E402
+import tts  # noqa: E402
 import wake  # noqa: E402
 import whispercpp  # noqa: E402
 from companion import Companion  # noqa: E402
+from conversation import Conversation  # noqa: E402
 from i18n import t  # noqa: E402
 from live import LiveTranscriber  # noqa: E402
 from meeting import MeetingPipeline  # noqa: E402
@@ -57,7 +60,7 @@ IDLE, RECORDING, BUSY = "idle", "recording", "busy"
 # apart so that neither waits on the other: an agent can spend a minute thinking,
 # and having dictation blocked for that minute is the whole problem. They share
 # only the microphone, which is one device and so can serve one of them at a time.
-DICTATION, ASK = "dictation", "ask"
+DICTATION, ASK, ZENO = "dictation", "ask", "zeno"
 # A meeting runs alongside dictation rather than through it: writing up an hour
 # of audio takes minutes, and dictation should not be held hostage to it.
 M_IDLE, M_RECORDING, M_WORKING = "idle", "recording", "working"
@@ -101,8 +104,14 @@ class Dikte:
         self.recorder = audio.Recorder()
         self.live = LiveTranscriber(self.conf, self.recorder)
         self.wake = wake.WakeListener(self.conf, str(cfg.WAKE_FILE))
+        self.voice = tts.Voice(self.conf, cfg.DATA_DIR)
         self.pipeline = Pipeline(self.conf)
         self.ask_pipeline = Pipeline(self.conf)
+        # Its own chain, so being spoken to never queues behind a dictation the
+        # shortcut started, and neither of them ever sees the other's stages.
+        self.zeno_pipeline = Pipeline(self.conf)
+        self.zeno = Conversation(self.conf, self.recorder, self.zeno_pipeline,
+                                 self.voice)
         self.meeting_recorder = audio.MeetingRecorder()
         self.meetings = MeetingPipeline(self.conf)
         self.evdev = hotkey.Hotkey()
@@ -145,6 +154,16 @@ class Dikte:
         self.live.partial.connect(self.companion.live)
         self.wake.woken.connect(self._on_woken)
         self.wake.failed.connect(self._on_error)
+        self.zeno.state_changed.connect(self._on_zeno_state)
+        self.zeno.heard.connect(self.companion.heard)
+        self.zeno.answered.connect(lambda text: self.companion.say(text, "agent"))
+        self.zeno.stage.connect(self.companion.show_busy)
+        self.zeno.failed.connect(self._on_zeno_failed)
+        self.zeno.finish_dictation.connect(self._paste_for_zeno)
+        self.zeno.ask_agent.connect(self._ask_for_zeno)
+        self.voice.started.connect(lambda: self.wake.pause(True))
+        self.voice.finished.connect(self._refresh_wake)
+        self.voice.failed.connect(lambda _m: self._refresh_wake())
         self.companion.clicked.connect(self._companion_clicked)
         self.companion.moved.connect(self._companion_moved)
         # Started here as well as when the settings are saved: the listener is
@@ -652,7 +671,9 @@ class Dikte:
 
     def _on_recorded(self, wav_path, duration, rms_values):
         owner, self.recorder_owner = self.recorder_owner, None
-        if owner == ASK:
+        if owner == ZENO:
+            self.zeno.take(wav_path, duration, rms_values)
+        elif owner == ASK:
             self.ask_pipeline.run(wav_path, duration, rms_values, ask=True)
         else:
             self.pipeline.run(wav_path, duration, rms_values)
@@ -821,10 +842,64 @@ class Dikte:
             self.conf["wake_enabled"] = False
 
     def _on_woken(self):
-        """The phrase was heard. Start a dictation, if nothing else is going on."""
-        if self.recording or self.state != IDLE:
+        """The name was heard. Listen for what comes after it."""
+        if self.recording or self.state != IDLE or self.zeno.busy:
             return
-        self.start()
+        if not self.zeno.wake():
+            return
+        self.recorder_owner = ZENO
+        self.companion.show_recording()
+        self.companion.stage(t("Listening…"))
+        self._set_state(RECORDING)
+
+    def _on_zeno_state(self, state):
+        """Keep the sphere and the microphone in step with the conversation."""
+        import conversation
+        if state == conversation.LISTENING:
+            self.companion.show_recording()
+        elif state == conversation.WORKING:
+            self.companion.orb.set_state("thinking")
+        elif state == conversation.WAITING:
+            if self.state != IDLE:
+                self._set_state(IDLE)
+            self.recorder_owner = None
+            self.companion.show_done()
+        self._refresh_wake()
+
+    def _on_zeno_failed(self, message):
+        self._report(message, self.overlay)
+        if self.state != IDLE:
+            self._set_state(IDLE)
+
+    def _paste_for_zeno(self, text):
+        """It was asked to write something down, so put it where the cursor is."""
+        try:
+            paste.copy(text)
+            if self.conf["auto_paste"]:
+                paste.press(self.conf["paste_shortcut"])
+        except paste.PasteError as exc:
+            self._on_zeno_failed(str(exc))
+            return
+        self.companion.stage(
+            t("Pasted") if self.conf["auto_paste"] else t("Copied"))
+
+    def _ask_for_zeno(self, question):
+        """Hand the question to the agent, on its own chain."""
+        self.companion.stage(t("Asking {name}…", name=i18n.name(
+            assistant.display_name(self.conf), "dative")))
+        threading.Thread(target=self._run_agent, args=(question,),
+                         daemon=True).start()
+
+    def _run_agent(self, question):
+        try:
+            answer, warning = assistant.ask(
+                question, self.conf, on_stage=self.zeno.stage.emit)
+        except assistant.Cancelled:
+            answer, warning = "", ""
+        except assistant.AssistantError as exc:
+            QTimer.singleShot(0, lambda: self._on_zeno_failed(str(exc)))
+            return
+        QTimer.singleShot(0, lambda: self.zeno.answer(answer, warning))
 
     def _companion_clicked(self):
         """The sphere is a button too: click it to start or stop talking."""

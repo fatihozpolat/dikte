@@ -21,6 +21,7 @@ import filetranscribe
 import hotkey
 import meeting
 import plat
+import tts
 import wake
 import whispercpp
 from filetranscribe import FileTranscriber
@@ -992,8 +993,81 @@ class SettingsWindow(QDialog):
         layout.addWidget(note)
 
         layout.addWidget(self._wake_box())
+        layout.addWidget(self._voice_box())
         layout.addStretch(1)
         return page
+
+    def _voice_box(self):
+        box = QGroupBox(t("Its voice"))
+        form = QFormLayout(box)
+
+        self.tts_enabled = QCheckBox(t("Say the answer out loud"))
+        self.tts_enabled.setToolTip(t(
+            "Off, the answer only appears in a bubble beside the character."
+        ))
+        form.addRow("", self.tts_enabled)
+
+        self.tts_speed = QSpinBox()
+        self.tts_speed.setRange(50, 200)
+        self.tts_speed.setSingleStep(5)
+        self.tts_speed.setSuffix(" %")
+        form.addRow(t("Speed"), self.tts_speed)
+
+        self.tts_try = QPushButton(t("Hear it"))
+        self.tts_try.clicked.connect(self._try_voice)
+        form.addRow("", self.tts_try)
+
+        self.tts_status = QLabel("")
+        self.tts_status.setWordWrap(True)
+        form.addRow(self.tts_status)
+
+        note = QLabel(t(
+            "Speech is made on this machine by Piper, the way transcription is "
+            "made by whisper.cpp: a program with a voice in a file, and nothing "
+            "sent anywhere. The Turkish voice was picked by measuring the pitch "
+            "of each of the three Piper offers rather than by reading their "
+            "names, two of which are men's names and one of which is not a man."
+        ))
+        note.setWordWrap(True)
+        form.addRow(note)
+
+        openings = QLabel(t(
+            "Openings that mean you want the words themselves written down "
+            "rather than acted on — one per line, added to the ones it already "
+            "knows (“yaz”, “not al”, “metne dök”, “write this down”)."
+        ))
+        openings.setWordWrap(True)
+        form.addRow(openings)
+        self.dictation_openings = QPlainTextEdit()
+        self.dictation_openings.setMaximumHeight(70)
+        form.addRow(self.dictation_openings)
+        return box
+
+    def _refresh_voice_status(self):
+        found = tts.binary_path(self.conf["tts_binary"])
+        voice = tts.voice_path(cfg.DATA_DIR, self.conf["tts_voice"])
+        self.tts_try.setEnabled(bool(found and voice))
+        if not found:
+            self.tts_status.setText(t(
+                "Piper was not found. Put piper.exe on PATH, or in "
+                "%LOCALAPPDATA%\\Programs\\piper."))
+        elif not voice:
+            self.tts_status.setText(t(
+                "No voice file. Put {name} in {folder}.",
+                name=tts.VOICE, folder=tts.voices_dir(cfg.DATA_DIR)))
+        else:
+            self.tts_status.setText(t("Ready: {voice}",
+                                      voice=os.path.basename(voice)))
+
+    def _try_voice(self):
+        self.conf["tts_speed"] = self.tts_speed.value() / 100.0
+        was, self.conf["tts_enabled"] = self.conf["tts_enabled"], True
+        try:
+            self._voice = getattr(self, "_voice", None) or tts.Voice(self.conf,
+                                                                    cfg.DATA_DIR)
+            self._voice.say(t("Merhaba, ben Zeno. Seni dinliyorum."))
+        finally:
+            self.conf["tts_enabled"] = was
 
     def _wake_box(self):
         box = QGroupBox(t("Waking it by voice"))
@@ -1270,7 +1344,11 @@ class SettingsWindow(QDialog):
         self.evdev_enabled.setChecked(conf["evdev_hotkey"])
         self.wake_phrase.setText(conf["wake_phrase"])
         self.wake_sensitivity.setValue(int(round(float(conf["wake_sensitivity"]) * 100)))
+        self.tts_enabled.setChecked(conf["tts_enabled"])
+        self.tts_speed.setValue(int(round(float(conf["tts_speed"] or 1.0) * 100)))
+        self.dictation_openings.setPlainText(conf["dictation_openings"])
         self._refresh_wake_status()
+        self._refresh_voice_status()
         self.wake_enabled.setChecked(
             conf["wake_enabled"] and self.wake_enabled.isEnabled())
 
@@ -1400,6 +1478,9 @@ class SettingsWindow(QDialog):
                                 and self.wake_enabled.isEnabled())
         conf["wake_phrase"] = self.wake_phrase.text().strip() or "Hey Zeno"
         conf["wake_sensitivity"] = self.wake_sensitivity.value() / 100.0
+        conf["tts_enabled"] = self.tts_enabled.isChecked()
+        conf["tts_speed"] = self.tts_speed.value() / 100.0
+        conf["dictation_openings"] = self.dictation_openings.toPlainText().strip()
         conf["history_limit"] = self.history_limit.value()
         conf.save()
         # A lowered limit should bite now, not on the next dictation.

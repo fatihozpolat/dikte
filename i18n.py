@@ -658,6 +658,83 @@ TR = {
         "Yalnızca yerel whisper ile çalışır: OpenAI ya da OpenRouter'da her "
         "konuşma saniyesi ücretli bir istek olurdu. Ayarlar → API ve modeller.",
 
+    # --- waking it by voice, and its own voice ------------------------------
+    "Waking it by voice": "Sesle uyandırma",
+    "Start a dictation when I say the phrase": "İfadeyi söyleyince başlasın",
+    "Holds the microphone open for as long as Dikte runs. Windows shows its "
+    "microphone indicator the whole time, which is the honest sign that "
+    "something is listening.":
+        "Dikte açık olduğu sürece mikrofonu açık tutar. Windows mikrofon "
+        "simgesini bu süre boyunca gösterir; bir şeyin dinlediğinin dürüst "
+        "işareti de budur.",
+    "Phrase": "İfade",
+    "Record the phrase": "İfadeyi kaydet",
+    "Record the phrase…": "İfadeyi kaydet…",
+    "Forget it": "Unut",
+    "Sensitivity": "Duyarlılık",
+    "Higher accepts a looser match, so it is caught more often and set off more "
+    "often. Lower is the other way round.":
+        "Yükseltmek daha gevşek eşleşmeyi kabul eder: daha sık yakalar, daha "
+        "sık yanlış tetiklenir. Düşürmek tersi.",
+    "Not recorded yet, so there is nothing to listen for.":
+        "Henüz kaydedilmedi, yani dinlenecek bir şey yok.",
+    "Recorded {count} times as “{phrase}”.":
+        "“{phrase}” olarak {count} kez kaydedildi.",
+    "Say “{phrase}” {count} times, the way you would say it to wake it up — "
+    "same distance, same voice. Pause between them.":
+        "“{phrase}” ifadesini {count} kez, onu uyandırmak için söyleyeceğin "
+        "gibi söyle — aynı mesafe, aynı ses. Aralarında biraz bekle.",
+    "Listening… 0 of {count}": "Dinleniyor… {count} taneden 0",
+    "Listening… {count} of {wanted}": "Dinleniyor… {wanted} taneden {count}",
+    "Not enough of the phrase was heard. Try again, a little louder, with a "
+    "pause between each one.":
+        "İfade yeterince duyulamadı. Biraz daha yüksek sesle ve aralarında "
+        "bekleyerek tekrar dene.",
+    "Could not save: {error}": "Kaydedilemedi: {error}",
+    "It works by shape, not by recognition: the phrase is recorded a few times "
+    "in your voice, and what the microphone hears is compared against those "
+    "recordings. So it knows your voice saying it, and not much else — which is "
+    "what lets it run without a trained model, a network or an account. Nothing "
+    "playable is stored, and nothing leaves the machine.":
+        "Tanıma değil, biçim eşleştirmesiyle çalışır: ifade senin sesinle "
+        "birkaç kez kaydedilir ve mikrofonun duyduğu bu kayıtlarla "
+        "karşılaştırılır. Yani senin onu söyleyişini bilir, fazlasını değil — "
+        "eğitilmiş bir model, internet ya da hesap gerektirmemesinin sebebi de "
+        "bu. Çalınabilir hiçbir şey saklanmaz, hiçbir şey makineden çıkmaz.",
+    "Listening…": "Dinliyorum…",
+    "Go ahead, I am listening.": "Buyur, dinliyorum.",
+
+    "Its voice": "Sesi",
+    "Say the answer out loud": "Cevabı sesli söyle",
+    "Off, the answer only appears in a bubble beside the character.":
+        "Kapalıyken cevap yalnızca karakterin yanındaki balonda görünür.",
+    "Speed": "Hız",
+    "Hear it": "Dinle",
+    "Ready: {voice}": "Hazır: {voice}",
+    "Piper was not found. Put piper.exe on PATH, or in "
+    "%LOCALAPPDATA%\\Programs\\piper.":
+        "Piper bulunamadı. piper.exe dosyasını PATH'e ya da "
+        "%LOCALAPPDATA%\\Programs\\piper altına koy.",
+    "No voice file. Put {name} in {folder}.":
+        "Ses dosyası yok. {name} dosyasını {folder} altına koy.",
+    "Speech is made on this machine by Piper, the way transcription is made by "
+    "whisper.cpp: a program with a voice in a file, and nothing sent anywhere. "
+    "The Turkish voice was picked by measuring the pitch of each of the three "
+    "Piper offers rather than by reading their names, two of which are men's "
+    "names and one of which is not a man.":
+        "Konuşma bu makinede Piper ile üretilir; tıpkı yazıya çevirmenin "
+        "whisper.cpp ile üretildiği gibi: sesi bir dosyada duran bir program, "
+        "ve hiçbir yere gönderilen bir şey yok. Türkçe ses, Piper'ın sunduğu üç "
+        "sesin perdesi ölçülerek seçildi; adlarına bakılarak değil — ikisi "
+        "erkek adı taşıyor ve biri erkek değil.",
+    "Openings that mean you want the words themselves written down rather than "
+    "acted on — one per line, added to the ones it already knows (“yaz”, "
+    "“not al”, “metne dök”, “write this down”).":
+        "Sözcüklerin kendisinin yazılmasını istediğini belirten başlangıçlar — "
+        "her satıra bir tane, zaten bildiklerinin üstüne eklenir (“yaz”, "
+        "“not al”, “metne dök”, “write this down”).",
+    "Merhaba, ben Zeno. Seni dinliyorum.": "Merhaba, ben Zeno. Seni dinliyorum.",
+
     # --- meetings: tray and pipeline ---------------------------------------
     "Record a meeting": "Toplantı kaydet",
     "End the meeting and write it up": "Toplantıyı bitir ve tutanağı çıkar",

@@ -49,12 +49,20 @@ class Pipeline(QObject):
     def busy(self):
         return self._thread is not None and self._thread.is_alive()
 
-    def run(self, wav_path, duration, rms_values=(), ask=False):
+    def run(self, wav_path, duration, rms_values=(), ask=False, paste_it=None):
+        """Start the chain.
+
+        `paste_it` overrides the setting for this one run. The assistant
+        answers out loud and on the screen rather than into whatever window
+        happened to have focus, so it asks for the answer without the paste;
+        a dictation started by the shortcut still follows the setting.
+        """
         if self.busy:
             return
         self._stop.clear()
         self._thread = threading.Thread(
-            target=self._work, args=(wav_path, duration, list(rms_values), ask),
+            target=self._work,
+            args=(wav_path, duration, list(rms_values), ask, paste_it),
             daemon=True,
         )
         self._thread.start()
@@ -68,7 +76,7 @@ class Pipeline(QObject):
         """
         self._stop.set()
 
-    def _work(self, wav_path, duration, rms_values, ask):
+    def _work(self, wav_path, duration, rms_values, ask, paste_it=None):
         conf = self.conf
         started = time.monotonic()
         raw = ""
@@ -133,7 +141,8 @@ class Pipeline(QObject):
                 previous = paste.read_clipboard() if conf["restore_clipboard"] else None
                 paste.copy(text)
 
-                if (conf["assistant_paste"] if ask else conf["auto_paste"]):
+                wanted = (conf["assistant_paste"] if ask else conf["auto_paste"])
+                if paste_it if paste_it is not None else wanted:
                     self.stage.emit(t("Pasting…"))
                     paste.press(conf["paste_shortcut"])
                     if previous is not None:
