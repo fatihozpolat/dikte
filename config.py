@@ -464,7 +464,17 @@ DEFAULTS = {
     "assistant_prompt": "",         # empty -> language-specific default
     "assistant_cleanup": False,     # the model reads through filler words fine
     "assistant_paste": True,        # paste the answer, not just copy it
-    "assistant_session_minutes": 30,  # 0 -> every command starts fresh
+    # 0 -> every command starts fresh, which is the default and deliberately
+    # so. Carrying the last conversation forward buys one thing — "and move
+    # that to Thursday" knowing what "that" is — and costs a worse one: an
+    # unrelated command answered against whatever came before it. Measured on a
+    # real pair, "how is the weather in Bolu" followed by "can you switch to the
+    # Chrome browser" opened the Bolu forecast in Chrome. Guessing that two
+    # commands belong together is the same mistake the keyword router made, and
+    # it fails the same way: silently, and in the direction you cannot undo.
+    # Turn it on if you want follow-ups; it is off because most things said to
+    # an assistant are not follow-ups.
+    "assistant_session_minutes": 0,
     "assistant_timeout": 240,
 }
 

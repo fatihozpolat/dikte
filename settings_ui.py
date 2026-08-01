@@ -660,9 +660,11 @@ class SettingsWindow(QDialog):
         self.assistant_session_minutes.setSpecialValueText(t("every command on its own"))
         thread_form.addRow(t("Carry on for"), self.assistant_session_minutes)
         thread_note = QLabel(t(
-            "Commands within this long of each other are one conversation, so "
-            "“and move that to Thursday” knows what “that” is. After it, the "
-            "next command starts fresh."
+            "Off by default: every command starts fresh. Turn it on and "
+            "commands within this long of each other become one conversation, "
+            "so “and move that to Thursday” knows what “that” is — at the "
+            "price of an unrelated command being answered against whatever "
+            "came before it."
         ))
         thread_note.setWordWrap(True)
         thread_form.addRow(thread_note)

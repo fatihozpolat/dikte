@@ -327,7 +327,12 @@ class Dikte:
             self.ask_state == RECORDING
             or (self.ask_state == IDLE and not self.recording)
         )
-        self.reset_action.setEnabled(self.ask_state != BUSY)
+        # With every command starting fresh there is no conversation to start
+        # a new one of, so the entry goes rather than sitting there doing
+        # nothing.
+        carries_on = bool(self.conf["assistant_session_minutes"])
+        self.reset_action.setVisible(carries_on)
+        self.reset_action.setEnabled(carries_on and self.ask_state != BUSY)
         # While it is in the middle of one, the entry becomes the way out.
         self.zeno_action.setText(
             t("Stop Zeno") if self.zeno.busy else t("Talk to Zeno"))

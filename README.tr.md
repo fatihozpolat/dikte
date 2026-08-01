@@ -241,7 +241,15 @@ bir cevabın görünmesi gereken biçim markdown.
   olmanı sağlayan da budur. Codex (`codex exec`) da aynı şekilde çalışır;
   OpenRouter ise ikisi de kurulu olmayan bir makinede düz soru cevap için
   duruyor. Sağlayıcı, model, izinler ve çalışma dizini Ayarlar → Ajan
-  sekmesinde; arka arkaya verilen komutlar tek bir konuşmada kalır.
+  sekmesinde.
+- **Her komut sıfırdan başlar.** Bir öncekini taşımak "onu perşembeye al"
+  dediğinde "o"nun ne olduğunun bilinmesini kazandırır, ama daha kötüsüne mal
+  olur: alakasız bir komut kendinden öncekine göre cevaplanır. Sesli denendi —
+  "Bolu'da hava nasıl", ardından "Chrome tarayıcıya çevirir misin" — ve Bolu
+  hava durumu Chrome'da açıldı. İki komutun birbirine ait olduğunu tahmin
+  etmek, anahtar kelime yönlendiricisinin başarısız olduğu gibi başarısız
+  olur: sessizce ve geri alamayacağın yönde. Ardışık soru soranlar için
+  Ayarlar → Ajan → *Şu kadar süre sürsün* onu açıyor.
 - **Toplantılar** mikrofonla hoparlör çıkışından aynı anda kaydedilir; kimin ne
   dediği tahmin edilmez, sesin hangi kanaldan geldiğiyle belli olur. İki taraf
   ayrı ayrı yazıya çevrilip tek bir zaman damgalı transkriptte birleştirilir,

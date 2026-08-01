@@ -120,7 +120,15 @@ def _read_row(name, max_age_seconds):
         return {}
     if not isinstance(row, dict) or row.get("provider") != name:
         return {}
-    if max_age_seconds and time.time() - row.get("ts", 0) > max_age_seconds:
+    # Zero means every command starts fresh, and it used to mean the opposite.
+    # `if max_age_seconds and time.time() - ... > max_age_seconds` short-circuits
+    # on zero, so the row was kept instead of dropped and the conversation was
+    # resumed for ever — the one setting written to stop exactly that. It read
+    # as a sensible "0 disables the check", and the check it disabled was the
+    # expiry rather than the resuming.
+    if not max_age_seconds:
+        return {}
+    if time.time() - row.get("ts", 0) > max_age_seconds:
         return {}
     return row
 

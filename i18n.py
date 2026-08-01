@@ -587,12 +587,14 @@ TR = {
         "erken de durdurulabilir.",
     "Carry on for": "Şu kadar süre sürsün",
     "every command on its own": "her komut ayrı",
-    "Commands within this long of each other are one conversation, so “and move "
-    "that to Thursday” knows what “that” is. After it, the next command starts "
-    "fresh.":
-        "Birbirinden bu kadar süre içinde gelen komutlar tek bir konuşmadır; "
-        "böylece “onu perşembeye al” dediğinde “o”nun ne olduğu bilinir. Bu "
-        "sürenin ardından bir sonraki komut sıfırdan başlar.",
+    "Off by default: every command starts fresh. Turn it on and commands "
+    "within this long of each other become one conversation, so “and move that "
+    "to Thursday” knows what “that” is — at the price of an unrelated command "
+    "being answered against whatever came before it.":
+        "Varsayılan olarak kapalı: her komut sıfırdan başlar. Açarsan, "
+        "birbirinden bu kadar süre içinde gelen komutlar tek bir konuşma olur; "
+        "böylece “onu perşembeye al” dediğinde “o”nun ne olduğu bilinir — "
+        "bedeli, alakasız bir komutun kendinden öncekine göre cevaplanmasıdır.",
     "No conversation going.": "Süren bir konuşma yok.",
     "Last used {minutes} min ago.": "En son {minutes} dk önce kullanıldı.",
     "Paste it into the focused window": "Odaktaki pencereye yapıştır",

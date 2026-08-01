@@ -244,8 +244,15 @@ look when it is read.
   a thing you can say to a window that is not Claude. Codex (`codex exec`) runs
   the same way, and OpenRouter is there as a plain question-and-answer fallback
   for a machine with neither CLI on it. Provider, model, permissions and working
-  directory are under Settings → Agent, and commands close together stay in one
-  conversation.
+  directory are under Settings → Agent.
+- **Every command starts fresh.** Carrying the last one forward buys "and move
+  that to Thursday" knowing what "that" is, and costs a worse thing: an
+  unrelated command answered against whatever came before it. Said out loud —
+  "how is the weather in Bolu", then "can you switch to the Chrome browser" —
+  and the Bolu forecast opened in Chrome. Guessing that two commands belong
+  together fails the same way the keyword router did: silently, and in the
+  direction you cannot undo. Settings → Agent → *Carry on for* turns it on for
+  anyone who wants follow-ups.
 - **Meetings** are recorded from the microphone and the speaker output at the
   same time, which settles who said what by the channel a voice arrived on
   instead of guessing at it. The two sides are transcribed separately and

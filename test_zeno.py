@@ -11,6 +11,7 @@ being given, and that the assistant is never listening while it is talking.
 """
 
 import io
+import json
 import os
 import pathlib
 import shutil
@@ -408,6 +409,65 @@ class TheStore(unittest.TestCase):
         with unittest.mock.patch.object(
                 cfg, "append_history", side_effect=OSError("disk dolu")):
             self.store.record(history.ASK, "soru", "cevap")
+
+
+class CarryingOn(unittest.TestCase):
+    """Whether one command is answered against the one before it.
+
+    The window is a number of minutes, and zero means every command starts
+    fresh. It has to actually mean that: the setting exists precisely so an
+    unrelated command is not answered against whatever came before it.
+    """
+
+    def setUp(self):
+        import assistant
+        self.assistant = assistant
+        self.tmp = tempfile.mkdtemp(prefix="dikte-session-")
+        patch = unittest.mock.patch.object(
+            assistant, "SESSION_FILE", pathlib.Path(self.tmp) / "assistant.json")
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def test_no_window_means_the_last_conversation_is_never_resumed(self):
+        """This is the bug the setting was supposed to prevent and did not:
+        `if minutes and expired` short-circuits on zero, so the row survived and
+        every command was answered against the previous one for ever. Said out
+        loud: "how is the weather in Bolu", then "can you switch to the Chrome
+        browser" — which opened the Bolu forecast in Chrome."""
+        self.assistant.write_session("claude", "abc-123")
+        self.assertEqual(self.assistant.read_session("claude", 0), "")
+
+    def test_no_window_drops_the_kept_messages_too(self):
+        """The provider that has no session id of its own keeps the messages
+        instead, and they leak the same way."""
+        self.assistant.write_session("openrouter", "", messages=[{"role": "user"}])
+        self.assertEqual(self.assistant.read_messages("openrouter", 0), [])
+
+    def test_inside_the_window_it_is_resumed(self):
+        self.assistant.write_session("claude", "abc-123")
+        self.assertEqual(self.assistant.read_session("claude", 1800), "abc-123")
+
+    def test_past_the_window_it_is_not(self):
+        self.assistant.write_session("claude", "abc-123")
+        with io.open(self.assistant.SESSION_FILE, encoding="utf-8") as handle:
+            row = json.load(handle)
+        row["ts"] = time.time() - 4000
+        with io.open(self.assistant.SESSION_FILE, "w", encoding="utf-8") as handle:
+            json.dump(row, handle)
+        self.assertEqual(self.assistant.read_session("claude", 1800), "")
+
+    def test_one_provider_never_picks_up_another_one_thread(self):
+        self.assistant.write_session("claude", "abc-123")
+        self.assertEqual(self.assistant.read_session("codex", 1800), "")
+
+    def test_starting_fresh_is_what_it_ships_as(self):
+        """Most things said to an assistant are not follow-ups, and the cost of
+        being wrong runs the wrong way: a follow-up that starts fresh asks you
+        what you meant, where a new command answered against the last one goes
+        and does something you did not ask for."""
+        import config as cfg
+        self.assertEqual(cfg.DEFAULTS["assistant_session_minutes"], 0)
 
 
 if __name__ == "__main__":
